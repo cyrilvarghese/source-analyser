@@ -215,3 +215,11 @@ docs/build/
 
 # JSON data files (if they contain sensitive data)
 *.json 
+
+#image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
