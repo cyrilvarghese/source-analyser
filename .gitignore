@@ -211,7 +211,7 @@ docs/build/
 *.backup
 
 # PDF files (if you don't want to commit large PDFs)
-# *.pdf
+*.pdf
 
 # JSON data files (if they contain sensitive data)
-# *.json 
+*.json 
