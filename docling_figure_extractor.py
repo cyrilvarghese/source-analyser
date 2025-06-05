@@ -28,7 +28,7 @@ def extract_figures_with_docling(input_pdf_path: str, output_dir: str = None):
     
     Args:
         input_pdf_path: Path to the input PDF file
-        output_dir: Output directory (defaults to PDF name + '_docling_extracted')
+        output_dir: Output directory (defaults to PDF name + '_docling_extracted' in extracted-data folder)
     """
     input_doc_path = Path(input_pdf_path)
     
@@ -36,11 +36,19 @@ def extract_figures_with_docling(input_pdf_path: str, output_dir: str = None):
         _log.error(f"PDF file not found: {input_pdf_path}")
         return False
     
+    # Create base extracted-data directory
+    base_extracted_dir = Path("extracted-data")
+    base_extracted_dir.mkdir(exist_ok=True)
+    
     # Create output directory based on PDF name if not specified
     if output_dir is None:
         output_dir = f"{input_doc_path.stem}_docling_extracted"
     
-    output_dir = Path(output_dir)
+    # Ensure output directory is within extracted-data
+    if not str(output_dir).startswith("extracted-data"):
+        output_dir = base_extracted_dir / output_dir
+    else:
+        output_dir = Path(output_dir)
     
     _log.info(f"Processing PDF with Docling: {input_pdf_path}")
     _log.info(f"Output directory: {output_dir}")

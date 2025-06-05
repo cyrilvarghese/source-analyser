@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Cropper - PDF Table Extraction Tool</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <h1 class="page-title">File Cropper</h1>
+            <p class="page-subtitle">PDF Table Extraction and Chapter Management Tool</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Quick Actions -->
+        <div class="section">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Quick Actions</h2>
+                </div>
+                <div class="card-body">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <a href="upload-form.html" class="btn btn-primary btn-lg" data-page="upload">
+                            <i class="fas fa-upload mr-3"></i>
+                            <div class="text-left">
+                                <div class="font-medium">Upload Files</div>
+                                <div class="text-sm opacity-80">Upload and extract tables</div>
+                            </div>
+                        </a>
+
+                        <a href="table-processor.html" class="btn btn-success btn-lg" data-page="processor">
+                            <i class="fas fa-table mr-3"></i>
+                            <div class="text-left">
+                                <div class="font-medium">Process Tables</div>
+                                <div class="text-sm opacity-80">Extract table data</div>
+                            </div>
+                        </a>
+
+                        <a href="extractions-viewer.html" class="btn btn-warning btn-lg" data-page="viewer">
+                            <i class="fas fa-eye mr-3"></i>
+                            <div class="text-left">
+                                <div class="font-medium">View Extractions</div>
+                                <div class="text-sm opacity-80">Browse extracted data</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chapter Manager -->
+        <div class="section">
+            <div id="chapter-manager-container"></div>
+        </div>
+
+        <!-- General File Upload -->
+        <div class="section">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">File Upload</h2>
+                </div>
+                <div class="card-body">
+                    <div id="general-upload-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features Overview -->
+        <div class="section">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-pdf text-3xl text-red-500 mb-3"></i>
+                        <h3 class="card-title">PDF Support</h3>
+                        <p class="text-sm text-gray-600">Upload and process PDF documents with table extraction</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-table text-3xl text-blue-500 mb-3"></i>
+                        <h3 class="card-title">Table Extraction</h3>
+                        <p class="text-sm text-gray-600">Advanced table detection and data extraction with full row
+                            objects</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cut text-3xl text-green-500 mb-3"></i>
+                        <h3 class="card-title">PDF Cropping</h3>
+                        <p class="text-sm text-gray-600">Create chapters by cropping specific page ranges</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-download text-3xl text-purple-500 mb-3"></i>
+                        <h3 class="card-title">Export Options</h3>
+                        <p class="text-sm text-gray-600">Download JSON data and cropped PDF chapters</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module">
+        import { initializeApp } from './assets/js/app-main.js';
+
+        // Initialize the application
+        initializeApp();
+    </script>
+</body>
+
+</html>

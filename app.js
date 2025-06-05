@@ -3,7 +3,8 @@ let currentFileId = null;
 let currentDocumentInfo = null;
 let allTocItems = [];
 let tocHierarchy = [];
-const API_BASE = 'http://localhost:8000';
+let extractedChapters = {}; // Store chapter extractions
+const API_BASE = 'http://localhost:8001';
 
 // DOM elements
 const dropzone = document.getElementById('dropzone');
@@ -24,6 +25,7 @@ const searchResults = document.getElementById('searchResults');
 // Initialize event listeners
 document.addEventListener('DOMContentLoaded', function () {
     initializeEventListeners();
+    loadExtractedChapters(); // Load any existing chapters
 });
 
 function initializeEventListeners() {
@@ -58,6 +60,12 @@ function initializeEventListeners() {
     document.getElementById('startPage').addEventListener('input', updatePageRange);
     document.getElementById('endPage').addEventListener('input', updatePageRange);
 
+    // Add null check for enableExtraction checkbox
+    const enableExtractionCheckbox = document.getElementById('enableExtraction');
+    if (enableExtractionCheckbox) {
+        enableExtractionCheckbox.addEventListener('change', updateCropButtonText);
+    }
+
     // Toast close
     document.getElementById('toastClose').addEventListener('click', hideToast);
 }
@@ -74,6 +82,8 @@ function handleDrop(e) {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
         handleFile(files[0]);
+        // Reset the file input to ensure consistency
+        resetFileInput();
     }
 }
 
@@ -82,6 +92,8 @@ function handleFileSelect(e) {
     if (file) {
         handleFile(file);
     }
+    // Reset the file input so the same file can be selected again
+    resetFileInput();
 }
 
 function handleFile(file) {
@@ -91,6 +103,10 @@ function handleFile(file) {
     }
 
     uploadFile(file);
+}
+
+function resetFileInput() {
+    fileInput.value = '';
 }
 
 async function uploadFile(file) {
@@ -118,10 +134,16 @@ async function uploadFile(file) {
         displayTOC(result.document_info.toc);
         showToast('Document uploaded successfully!', 'success');
 
+        // Reset file input after successful upload
+        resetFileInput();
+
     } catch (error) {
         hideUploadProgress();
         showToast(`Upload failed: ${error.message}`, 'error');
         console.error('Upload error:', error);
+
+        // Reset file input after failed upload
+        resetFileInput();
     }
 }
 
@@ -402,10 +424,33 @@ function updatePageRange() {
     }
 }
 
+function updateCropButtonText() {
+    const enableExtractionCheckbox = document.getElementById('enableExtraction');
+    const cropBtnText = document.getElementById('cropBtnText');
+
+    // Add null checks
+    if (!enableExtractionCheckbox || !cropBtnText) {
+        return;
+    }
+
+    const enableExtraction = enableExtractionCheckbox.checked;
+
+    if (enableExtraction) {
+        cropBtnText.textContent = 'Crop & Extract';
+    } else {
+        cropBtnText.textContent = 'Crop Only';
+    }
+}
+
 async function cropSection() {
     const sectionTitle = document.getElementById('sectionTitle').value;
     const startPage = parseInt(document.getElementById('startPage').value);
     const endPage = parseInt(document.getElementById('endPage').value);
+
+    // Add null check for enableExtraction checkbox
+    const enableExtractionCheckbox = document.getElementById('enableExtraction');
+    const enableExtraction = enableExtractionCheckbox ? enableExtractionCheckbox.checked : false;
+    const skipExtraction = !enableExtraction; // Invert the logic for backend compatibility
 
     if (!sectionTitle || !startPage || !endPage) {
         showToast('Please fill in all fields', 'error');
@@ -425,6 +470,7 @@ async function cropSection() {
         formData.append('start_page', startPage);
         formData.append('end_page', endPage);
         formData.append('section_title', sectionTitle);
+        formData.append('skip_extraction', skipExtraction);
 
         const response = await fetch(`${API_BASE}/crop-section/`, {
             method: 'POST',
@@ -435,20 +481,46 @@ async function cropSection() {
             throw new Error(`Crop failed: ${response.statusText}`);
         }
 
-        // Download the cropped PDF
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${sectionTitle}_pages_${startPage}-${endPage}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        const result = await response.json();
 
         hideLoadingOverlay();
         hideCropPanel();
-        showToast('Section cropped and downloaded successfully!', 'success');
+
+        if (result.success) {
+            // Store the extracted chapter
+            extractedChapters[result.chapter_id] = result;
+
+            // Show success message with extraction details
+            let successMessage = `Section cropped successfully!`;
+
+            if (!enableExtraction) {
+                successMessage += `\nImage extraction was skipped (crop only mode).`;
+                showToast(successMessage, 'success');
+
+                // For crop-only mode, directly download the PDF
+                const downloadUrl = result.cropped_pdf.download_full_url || result.cropped_pdf.download_url;
+                if (downloadUrl) {
+                    window.open(downloadUrl, '_blank');
+                }
+            } else if (result.extraction.success) {
+                successMessage += `\nExtracted ${result.extraction.total_images} images!`;
+                showToast(successMessage, 'success');
+
+                // Show modal with all options for successful extraction
+                showExtractionResultModal(result);
+            } else {
+                successMessage += `\nImage extraction failed: ${result.extraction.error}`;
+                showToast(successMessage, 'error');
+
+                // Show modal even for failed extraction to allow download
+                showExtractionResultModal(result);
+            }
+
+            // Refresh chapters list to show the new chapter
+            loadExtractedChapters();
+        } else {
+            showToast('Crop failed', 'error');
+        }
 
     } catch (error) {
         hideLoadingOverlay();
@@ -652,4 +724,288 @@ function collapseAllTocItems() {
             toggleTocItem(itemId);
         }
     });
+}
+
+async function loadExtractedChapters() {
+    // Load previously extracted chapters from the server.
+    try {
+        const response = await fetch(`${API_BASE}/list-chapters`);
+        if (response.ok) {
+            const result = await response.json();
+            extractedChapters = {};
+
+            // Convert array to object for easier access
+            result.chapters.forEach(chapter => {
+                extractedChapters[chapter.chapter_id] = chapter;
+            });
+
+            // Display chapters if any exist
+            if (result.chapters.length > 0) {
+                displayExtractedChapters(result.chapters);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading extracted chapters:', error);
+    }
+}
+
+function displayExtractedChapters(chapters) {
+    // Display extracted chapters in a dedicated section.
+    // Create or update chapters section
+    let chaptersSection = document.getElementById('chaptersSection');
+    if (!chaptersSection) {
+        chaptersSection = document.createElement('div');
+        chaptersSection.id = 'chaptersSection';
+        chaptersSection.className = 'mt-8';
+
+        // Insert after document info section
+        const documentInfoSection = document.getElementById('documentInfo');
+        // if (documentInfoSection) {
+        //     documentInfoSection.parentNode.insertBefore(chaptersSection, documentInfoSection.nextSibling);
+        // } else {
+        //     document.body.appendChild(chaptersSection);
+        // }
+    }
+
+    chaptersSection.innerHTML = `
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Extracted Chapters (${chapters.length})</h3>
+            <div class="space-y-4" id="chaptersList">
+                ${chapters.map(chapter => createChapterCard(chapter)).join('')}
+            </div>
+        </div>
+    `;
+
+    // Add event listeners for chapter actions
+    addChapterEventListeners();
+}
+
+function createChapterCard(chapter) {
+    // Create HTML for a chapter card.
+    const statusBadge = chapter.extraction_success ?
+        '<span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">Extracted</span>' :
+        '<span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs">Failed</span>';
+
+    const htmlUrl = chapter.html_url || (chapter.extraction_result && chapter.extraction_result.html_full_url);
+    const downloadUrl = chapter.download_full_url || chapter.download_url;
+
+    const actionButtons = chapter.extraction_success ? `
+        <div class="flex space-x-2">
+            ${chapter.html_available ? `<button class="view-html-btn bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600" data-chapter-id="${chapter.chapter_id}" data-html-url="${htmlUrl}">View HTML</button>` : ''}
+            <button class="browse-images-btn bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600" data-chapter-id="${chapter.chapter_id}">Browse Images (${chapter.total_images})</button>
+            <button class="download-pdf-btn bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600" data-chapter-id="${chapter.chapter_id}" data-download-url="${downloadUrl}">Download PDF</button>
+            <button class="delete-chapter-btn bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600" data-chapter-id="${chapter.chapter_id}">Delete</button>
+        </div>
+    ` : `
+        <div class="flex space-x-2">
+            <button class="download-pdf-btn bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600" data-chapter-id="${chapter.chapter_id}" data-download-url="${downloadUrl}">Download PDF</button>
+            <button class="delete-chapter-btn bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600" data-chapter-id="${chapter.chapter_id}">Delete</button>
+        </div>
+    `;
+
+    return `
+        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <h4 class="font-medium text-gray-800">${chapter.section_title}</h4>
+                    <p class="text-sm text-gray-600">Pages ${chapter.page_range}</p>
+                    <div class="mt-2">${statusBadge}</div>
+                </div>
+                <div class="ml-4">
+                    ${actionButtons}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function addChapterEventListeners() {
+    // Add event listeners for chapter action buttons.
+    // View HTML buttons
+    document.querySelectorAll('.view-html-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const htmlUrl = e.target.dataset.htmlUrl;
+            window.open(htmlUrl, '_blank');
+        });
+    });
+
+    // Browse images buttons
+    document.querySelectorAll('.browse-images-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const chapterId = e.target.dataset.chapterId;
+            browseChapterImages(chapterId);
+        });
+    });
+
+    // Download PDF buttons
+    document.querySelectorAll('.download-pdf-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const downloadUrl = e.target.dataset.downloadUrl;
+            window.open(downloadUrl, '_blank');
+        });
+    });
+
+    // Delete chapter buttons
+    document.querySelectorAll('.delete-chapter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const chapterId = e.target.dataset.chapterId;
+            deleteChapter(chapterId);
+        });
+    });
+}
+
+async function browseChapterImages(chapterId) {
+    // Display images from a chapter in a modal.
+    try {
+        const response = await fetch(`${API_BASE}/browse-chapter/${chapterId}`);
+        if (!response.ok) {
+            throw new Error('Failed to load chapter details');
+        }
+
+        const chapterData = await response.json();
+        const images = chapterData.extraction_result.images;
+
+        // Create and show image browser modal
+        showImageBrowserModal(chapterData.section_title, images);
+
+    } catch (error) {
+        showToast(`Error loading images: ${error.message}`, 'error');
+    }
+}
+
+function showImageBrowserModal(sectionTitle, images) {
+    // Show a modal with image browser.
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50';
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            document.body.removeChild(modal);
+        }
+    };
+
+    const imagesGrid = images.length > 0 ?
+        images.map(img => `
+            <div class="bg-white rounded-lg overflow-hidden shadow-md">
+                <img src="${img.url}" alt="${img.filename}" class="w-full h-48 object-cover cursor-pointer" onclick="window.open('${img.url}', '_blank')">
+                <div class="p-2">
+                    <p class="text-sm font-medium truncate">${img.filename}</p>
+                    <p class="text-xs text-gray-500">${formatFileSize(img.size)}</p>
+                </div>
+            </div>
+        `).join('') :
+        '<p class="text-gray-500 col-span-full text-center py-8">No images found</p>';
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg max-w-6xl max-h-5/6 overflow-hidden">
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold">${sectionTitle} - Images (${images.length})</h3>
+                    <button class="text-gray-500 hover:text-gray-700" onclick="document.body.removeChild(this.closest('.fixed'))">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 overflow-auto max-h-96">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    ${imagesGrid}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+async function deleteChapter(chapterId) {
+    // Delete a chapter and refresh the list.
+    if (!confirm('Are you sure you want to delete this chapter? This will remove all extracted files.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/delete-chapter/${chapterId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('Chapter deleted successfully', 'success');
+            // Remove from local storage
+            delete extractedChapters[chapterId];
+            // Reload chapters list
+            loadExtractedChapters();
+        } else {
+            throw new Error('Failed to delete chapter');
+        }
+    } catch (error) {
+        showToast(`Error deleting chapter: ${error.message}`, 'error');
+    }
+}
+
+function formatFileSize(bytes) {
+    // Format file size in human readable format.
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function showExtractionResultModal(result) {
+    // Show a modal with extraction results and quick actions.
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50';
+
+    const extractionStatus = result.extraction.success ?
+        `<div class="text-green-600 mb-4">
+            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <p>Successfully extracted ${result.extraction.total_images} images!</p>
+        </div>` :
+        `<div class="text-red-600 mb-4">
+            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            <p>Image extraction failed: ${result.extraction.error}</p>
+        </div>`;
+
+    const htmlViewUrl = result.extraction.html_full_url || result.extraction.html_url;
+    const downloadUrl = result.cropped_pdf.download_full_url || result.cropped_pdf.download_url;
+
+    const actionButtons = result.extraction.success ? `
+        <div class="flex flex-wrap gap-2 justify-center">
+            ${htmlViewUrl ? `<button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600" onclick="window.open('${htmlViewUrl}', '_blank')">View HTML</button>` : ''}
+            <button class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600" onclick="browseChapterImages('${result.chapter_id}')">Browse Images</button>
+            <button class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600" onclick="window.open('${downloadUrl}', '_blank')">Download PDF</button>
+        </div>
+    ` : `
+        <div class="flex justify-center">
+            <button class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600" onclick="window.open('${downloadUrl}', '_blank')">Download PDF</button>
+        </div>
+    `;
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg p-6 max-w-md w-full text-center">
+            <h3 class="text-lg font-semibold mb-4">${result.section_title}</h3>
+            <p class="text-gray-600 mb-4">Pages ${result.page_range}</p>
+            
+            ${extractionStatus}
+            
+            ${actionButtons}
+            
+            <button class="mt-4 text-gray-500 hover:text-gray-700" onclick="document.body.removeChild(this.closest('.fixed'))">
+                Close
+            </button>
+        </div>
+    `;
+
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            document.body.removeChild(modal);
+        }
+    };
+
+    document.body.appendChild(modal);
 } 

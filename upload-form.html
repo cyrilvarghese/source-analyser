@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload - Table Extractor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="max-w-2xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Upload File for Table Extraction</h1>
+            <p class="text-gray-600">Upload an image or PDF containing tables to extract data</p>
+        </div>
+
+        <!-- Upload Form -->
+        <div class="bg-white rounded-lg shadow-md p-8">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <!-- File Upload Area -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Select File
+                    </label>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors"
+                        id="dropArea">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-lg text-gray-600 mb-2">Drag and drop your file here</p>
+                        <p class="text-sm text-gray-500 mb-4">or</p>
+                        <input type="file" id="fileInput" name="file" accept=".png,.jpg,.jpeg,.pdf" class="hidden">
+                        <button type="button" id="selectBtn"
+                            class="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                            Choose File
+                        </button>
+                    </div>
+                    <div id="fileInfo" class="mt-4 hidden">
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p class="text-sm text-blue-800">
+                                <i class="fas fa-file mr-2"></i>
+                                <strong>Selected:</strong> <span id="fileName"></span>
+                            </p>
+                            <p class="text-xs text-blue-600 mt-1" id="fileSize"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Key is now configured in backend -->
+
+                <!-- Submit Button -->
+                <div class="text-center">
+                    <button type="submit" id="submitBtn" disabled
+                        class="bg-green-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <i class="fas fa-code mr-2"></i>
+                        Extract to JSON
+                    </button>
+                </div>
+            </form>
+
+            <!-- Loading State -->
+            <div id="loading" class="hidden text-center py-8">
+                <i class="fas fa-spinner fa-spin text-3xl text-blue-500 mb-4"></i>
+                <p class="text-gray-600">Processing your file...</p>
+            </div>
+
+            <!-- Results -->
+            <div id="results" class="hidden mt-8">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">Results</h3>
+                <div id="resultContent">
+                    <!-- Results will be displayed here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Back Button -->
+        <div class="text-center mt-6">
+            <a href="index.html" class="text-blue-600 hover:text-blue-800 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Back to Home
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Get DOM elements
+        const fileInput = document.getElementById('fileInput');
+        const selectBtn = document.getElementById('selectBtn');
+        const dropArea = document.getElementById('dropArea');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const submitBtn = document.getElementById('submitBtn');
+        const uploadForm = document.getElementById('uploadForm');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+
+        // File selection
+        selectBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Drag and drop
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.classList.add('border-blue-400', 'bg-blue-50');
+        });
+
+        dropArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropArea.classList.remove('border-blue-400', 'bg-blue-50');
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.classList.remove('border-blue-400', 'bg-blue-50');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+
+        function handleFileSelect() {
+            const file = fileInput.files[0];
+
+            if (file) {
+                // Show file info
+                fileName.textContent = file.name;
+                const fileSize = document.getElementById('fileSize');
+                fileSize.textContent = `Size: ${formatFileSize(file.size)} • Type: ${file.type}`;
+                fileInfo.classList.remove('hidden');
+
+                // Enable submit button when file is selected
+                submitBtn.disabled = false;
+            } else {
+                fileInfo.classList.add('hidden');
+                submitBtn.disabled = true;
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // API key is now configured in backend environment
+
+        // Form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData();
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            // Show loading
+            uploadForm.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                // Add file to form data
+                formData.append('file', file);
+
+                // Make request to new JSON extraction endpoint
+                const response = await fetch('/api/tables/extract-json/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showResults(result);
+                } else {
+                    throw new Error(result.message || 'Processing failed');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError(error.message);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        });
+
+        function showResults(result) {
+            const resultContent = document.getElementById('resultContent');
+
+            let html = `
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <h4 class="text-green-800 font-medium">✅ Processing Complete</h4>
+                    <p class="text-green-700 text-sm">Found ${result.tables_found} table(s) in ${result.processing_time}</p>
+                </div>
+            `;
+
+            if (result.json_data) {
+                html += `
+                    <div class="mt-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h5 class="font-medium">JSON Output:</h5>
+                            <button onclick="copyToClipboard()" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                                <i class="fas fa-copy mr-1"></i>Copy JSON
+                            </button>
+                        </div>
+                        <pre id="jsonOutput" class="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap font-mono">${JSON.stringify(result.json_data, null, 2)}</pre>
+                    </div>
+                `;
+            }
+
+            resultContent.innerHTML = html;
+            results.classList.remove('hidden');
+        }
+
+        function copyToClipboard() {
+            const jsonOutput = document.getElementById('jsonOutput');
+            const text = jsonOutput.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('JSON copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        function showError(message) {
+            const resultContent = document.getElementById('resultContent');
+            resultContent.innerHTML = `
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h4 class="text-red-800 font-medium">❌ Error</h4>
+                    <p class="text-red-700 text-sm">${message}</p>
+                </div>
+            `;
+            results.classList.remove('hidden');
+            uploadForm.classList.remove('hidden');
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Processor - File Cropper</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <h1 class="page-title">Table Processing</h1>
+            <p class="page-subtitle">Process and extract tables from your uploaded documents</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Table Processor Component -->
+        <div id="table-processor-container"></div>
+
+        <!-- Navigation -->
+        <div class="section">
+            <div class="flex justify-center gap-4">
+                <a href="index.html" class="btn btn-outline" data-page="index">
+                    <i class="fas fa-home mr-2"></i>
+                    Home
+                </a>
+                <a href="upload-form.html" class="btn btn-primary" data-page="upload">
+                    <i class="fas fa-upload mr-2"></i>
+                    Upload Files
+                </a>
+                <a href="extractions-viewer.html" class="btn btn-outline" data-page="viewer">
+                    <i class="fas fa-eye mr-2"></i>
+                    View Extractions
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module">
+        import { initializeApp } from './assets/js/app-main.js';
+
+        // Initialize the application
+        initializeApp();
+    </script>
+</body>
+
+</html>
