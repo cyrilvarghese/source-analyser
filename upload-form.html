@@ -4,17 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Upload - Table Extractor</title>
+    <title>File Upload - Table Extractor & Tree Viewer</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body class="bg-gray-100 min-h-screen py-8">
-    <div class="max-w-2xl mx-auto">
+    <div class="max-w-7xl mx-auto px-4">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Upload File for Table Extraction</h1>
-            <p class="text-gray-600">Upload an image or PDF containing tables to extract data</p>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Table Extractor & Tree Viewer</h1>
+            <p class="text-gray-600">Upload an image or PDF containing tables to extract data and view as interactive
+                tree</p>
         </div>
 
         <!-- Upload Form -->
@@ -203,21 +204,407 @@
             `;
 
             if (result.json_data) {
+                // Create tabbed interface for different views
                 html += `
                     <div class="mt-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <h5 class="font-medium">JSON Output:</h5>
-                            <button onclick="copyToClipboard()" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
-                                <i class="fas fa-copy mr-1"></i>Copy JSON
+                                                <!-- Tab Navigation -->
+                        <div class="flex border-b border-gray-200 mb-4">
+                            <button onclick="showTab('table')" id="tableTab" class="px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600">
+                                <i class="fas fa-table mr-2"></i>Table View
+                            </button>
+                            <button onclick="showTab('json')" id="jsonTab" class="px-4 py-2 font-medium text-gray-500 hover:text-gray-700">
+                                <i class="fas fa-code mr-2"></i>Raw JSON
                             </button>
                         </div>
-                        <pre id="jsonOutput" class="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap font-mono">${JSON.stringify(result.json_data, null, 2)}</pre>
+
+                        <!-- Table View Tab -->
+                        <div id="tableView" class="tab-content">
+                            <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                <div class="bg-gray-50 p-4 border-b border-gray-200 flex items-center justify-between">
+                                    <div>
+                                        <h5 class="font-medium text-xl">${result.json_data.department || 'Department'}</h5>
+                                        <p class="text-sm text-gray-600">${getTotalCompetencies(result.json_data)} competencies across ${result.json_data.topics ? result.json_data.topics.length : 0} topics</p>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="text" id="searchInput" placeholder="Search competencies..." class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <button onclick="exportAllTopics()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm transition-colors duration-200">
+                                            <i class="fas fa-download mr-2"></i>Export All
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    ${generateTableHTML(result.json_data)}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- JSON View Tab -->
+                        <div id="jsonView" class="tab-content hidden">
+                            <div class="bg-white border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h5 class="font-medium text-lg">Raw JSON Output</h5>
+                                    <button onclick="copyToClipboard()" class="bg-blue-500 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-600 transition-colors duration-200">
+                                        <i class="fas fa-copy mr-2"></i>Copy JSON
+                                    </button>
+                                </div>
+                                <pre id="jsonOutput" class="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap font-mono">${JSON.stringify(result.json_data, null, 2)}</pre>
+                            </div>
+                        </div>
                     </div>
                 `;
             }
 
             resultContent.innerHTML = html;
             results.classList.remove('hidden');
+        }
+
+        function generateTableHTML(data) {
+            console.log('Generating table HTML with data:', data);
+
+            if (!data || typeof data !== 'object') {
+                console.error('Invalid data type:', typeof data);
+                return '<div class="p-8 text-center text-red-500">Error: Invalid data format</div>';
+            }
+
+            if (!data.topics || !Array.isArray(data.topics)) {
+                console.warn('No topics array found. Data structure:', Object.keys(data));
+                return '<div class="p-8 text-center text-gray-500">No topics found in the data.</div>';
+            }
+
+            console.log(`Found ${data.topics.length} topics:`, data.topics.map(t => t.topic));
+            let tableHTML = '';
+
+            data.topics.forEach((topic, topicIndex) => {
+                const topicId = `topic-${topicIndex}`;
+
+                // Topic header row
+                tableHTML += `
+                    <div class="bg-gray-100 border-b border-gray-300">
+                        <div class="flex items-center justify-between p-4">
+                            <div class="flex items-center space-x-2">
+                                <h3 class="font-semibold text-gray-800 text-lg">${escapeHtml(topic.topic)}</h3>
+                                <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                                    ${topic.competencies ? topic.competencies.length : 0} competencies
+                                </span>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="createCases('${topicId}', '${escapeHtml(topic.topic)}')" 
+                                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
+                                    <i class="fas fa-plus-circle mr-1"></i>Add ${escapeHtml(topic.topic)}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Table header for this topic
+                tableHTML += `
+                    <div class="bg-gray-50 border-b border-gray-200">
+                        <div class="grid grid-cols-12 gap-4 p-3 text-sm font-medium text-gray-700 uppercase tracking-wide">
+                            <div class="col-span-1">CODE</div>
+                            <div class="col-span-4">COMPETENCY</div>
+                            <div class="col-span-3">TEACHING</div>
+                            <div class="col-span-3">ASSESSMENT</div>
+                            <div class="col-span-1 text-center">ACTION</div>
+                        </div>
+                    </div>
+                `;
+
+                // Competency rows
+                if (topic.competencies && topic.competencies.length > 0) {
+                    console.log(`Topic "${topic.topic}" has ${topic.competencies.length} competencies:`, topic.competencies);
+                    topic.competencies.forEach((competency, compIndex) => {
+                        const compId = `${topicId}-comp-${compIndex}`;
+                        console.log(`Processing competency ${compIndex}:`, competency);
+
+                        tableHTML += `
+                            <div class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-200 competency-row" data-search="${escapeHtml(competency.number + ' ' + competency.competency).toLowerCase()}">
+                                <div class="grid grid-cols-12 gap-4 p-4 items-start">
+                                    <div class="col-span-1">
+                                        <span class="font-medium text-gray-800">${escapeHtml(competency.number || '')}</span>
+                                    </div>
+                                    <div class="col-span-4">
+                                        <p class="text-gray-800 text-sm leading-relaxed">${escapeHtml(competency.competency || '')}</p>
+                                    </div>
+                                    <div class="col-span-3">
+                                        <div class="flex flex-wrap gap-1">
+                                            ${(competency.teaching_methods || []).map(method =>
+                            `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
+                        ).join('')}
+                                        </div>
+                                    </div>
+                                    <div class="col-span-3">
+                                        <div class="flex flex-wrap gap-1">
+                                            ${(competency.assessment_methods || []).map(method =>
+                            `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
+                        ).join('')}
+                                        </div>
+                                    </div>
+                                    <div class="col-span-1 text-center">
+                                        <div class="relative inline-block text-left">
+                                            <button onclick="showActionDropdown('${compId}')" 
+                                                    class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-md text-sm transition-colors duration-200">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <div id="dropdown-${compId}" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                                                <div class="py-1">
+                                                    <button onclick="createCase('${compId}', '${escapeHtml(competency.number || 'Unknown')}')" 
+                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                        <i class="fas fa-plus mr-2"></i>Add Assessment
+                                                    </button>
+                                                    <button onclick="editCompetency('${compId}')" 
+                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                        <i class="fas fa-edit mr-2"></i>Edit
+                                                    </button>
+                                                    <button onclick="duplicateCompetency('${compId}')" 
+                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                        <i class="fas fa-copy mr-2"></i>Duplicate
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    tableHTML += `
+                        <div class="p-8 text-center text-gray-500 italic">
+                            No competencies found for this topic.
+                        </div>
+                    `;
+                }
+            });
+
+            return tableHTML;
+        }
+
+        function getTotalCompetencies(data) {
+            if (!data.topics || !Array.isArray(data.topics)) return 0;
+            return data.topics.reduce((total, topic) => {
+                return total + (topic.competencies ? topic.competencies.length : 0);
+            }, 0);
+        }
+
+        function showActionDropdown(compId) {
+            // Close all other dropdowns
+            document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+                if (dropdown.id !== `dropdown-${compId}`) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+
+            // Toggle current dropdown
+            const dropdown = document.getElementById(`dropdown-${compId}`);
+            dropdown.classList.toggle('hidden');
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('[onclick*="showActionDropdown"]')) {
+                document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+                    dropdown.classList.add('hidden');
+                });
+            }
+        });
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function (m) { return map[m]; });
+        }
+
+        function showTab(tabName) {
+            // Update tab buttons
+            document.getElementById('tableTab').className = tabName === 'table'
+                ? 'px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600'
+                : 'px-4 py-2 font-medium text-gray-500 hover:text-gray-700';
+
+            document.getElementById('jsonTab').className = tabName === 'json'
+                ? 'px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600'
+                : 'px-4 py-2 font-medium text-gray-500 hover:text-gray-700';
+
+            // Show/hide content
+            document.getElementById('tableView').className = tabName === 'table' ? 'tab-content' : 'tab-content hidden';
+            document.getElementById('jsonView').className = tabName === 'json' ? 'tab-content' : 'tab-content hidden';
+        }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', function () {
+                    const searchTerm = this.value.toLowerCase();
+                    const competencyRows = document.querySelectorAll('.competency-row');
+
+                    competencyRows.forEach(row => {
+                        const searchData = row.getAttribute('data-search') || '';
+                        if (searchData.includes(searchTerm)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        });
+
+        function exportAllTopics() {
+            alert('Exporting all topics...');
+            // Implement export functionality
+        }
+
+        function duplicateCompetency(compId) {
+            alert(`Duplicating competency: ${compId}`);
+            // Implement duplicate functionality
+        }
+
+        // Action functions
+        function createCases(topicId, topicName) {
+            showActionModal('Create Cases', `Creating cases for topic: <strong>${topicName}</strong>`, [
+                { label: 'Generate MCQs', action: () => generateMCQs(topicId, topicName), color: 'blue' },
+                { label: 'Create Scenarios', action: () => createScenarios(topicId, topicName), color: 'green' },
+                { label: 'Generate Flashcards', action: () => generateFlashcards(topicId, topicName), color: 'purple' }
+            ]);
+        }
+
+        function createCase(compId, competencyCode) {
+            showActionModal('Create Case', `Creating case for competency: <strong>${competencyCode}</strong>`, [
+                { label: 'Single MCQ', action: () => generateSingleMCQ(compId, competencyCode), color: 'blue' },
+                { label: 'Case Scenario', action: () => createSingleScenario(compId, competencyCode), color: 'green' },
+                { label: 'Flashcard', action: () => generateSingleFlashcard(compId, competencyCode), color: 'purple' }
+            ]);
+        }
+
+        function exportTopic(topicId, topicName) {
+            showActionModal('Export Topic', `Export options for: <strong>${topicName}</strong>`, [
+                { label: 'Export as CSV', action: () => exportAsCSV(topicId, topicName), color: 'green' },
+                { label: 'Export as PDF', action: () => exportAsPDF(topicId, topicName), color: 'red' },
+                { label: 'Export as Excel', action: () => exportAsExcel(topicId, topicName), color: 'blue' }
+            ]);
+        }
+
+        function analyzeTopic(topicId, topicName) {
+            showActionModal('Analyze Topic', `Analysis options for: <strong>${topicName}</strong>`, [
+                { label: 'Competency Distribution', action: () => showCompetencyDistribution(topicId, topicName), color: 'purple' },
+                { label: 'Difficulty Analysis', action: () => showDifficultyAnalysis(topicId, topicName), color: 'orange' },
+                { label: 'Generate Report', action: () => generateTopicReport(topicId, topicName), color: 'gray' }
+            ]);
+        }
+
+        function editCompetency(compId) {
+            alert(`Edit competency: ${compId}`);
+            // Implement edit functionality
+        }
+
+        function showActionModal(title, description, actions) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                    <h3 class="text-lg font-semibold mb-2">${title}</h3>
+                    <p class="text-gray-600 mb-4">${description}</p>
+                    <div class="space-y-2">
+                        ${actions.map(action => `
+                            <button onclick="${action.action.toString().replace('function ', '').replace('()', '()')}" 
+                                    class="w-full bg-${action.color}-600 hover:bg-${action.color}-700 text-white px-4 py-2 rounded-md transition-colors duration-200">
+                                ${action.label}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button onclick="closeModal()" class="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md transition-colors duration-200">
+                        Cancel
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            window.currentModal = modal;
+        }
+
+        function closeModal() {
+            if (window.currentModal) {
+                document.body.removeChild(window.currentModal);
+                window.currentModal = null;
+            }
+        }
+
+        // Placeholder functions for actions
+        function generateMCQs(topicId, topicName) {
+            closeModal();
+            alert(`Generating MCQs for topic: ${topicName}`);
+            // Implement MCQ generation
+        }
+
+        function createScenarios(topicId, topicName) {
+            closeModal();
+            alert(`Creating scenarios for topic: ${topicName}`);
+            // Implement scenario creation
+        }
+
+        function generateFlashcards(topicId, topicName) {
+            closeModal();
+            alert(`Generating flashcards for topic: ${topicName}`);
+            // Implement flashcard generation
+        }
+
+        function generateSingleMCQ(compId, competencyCode) {
+            closeModal();
+            alert(`Generating MCQ for competency: ${competencyCode}`);
+            // Implement single MCQ generation
+        }
+
+        function createSingleScenario(compId, competencyCode) {
+            closeModal();
+            alert(`Creating scenario for competency: ${competencyCode}`);
+            // Implement single scenario creation
+        }
+
+        function generateSingleFlashcard(compId, competencyCode) {
+            closeModal();
+            alert(`Generating flashcard for competency: ${competencyCode}`);
+            // Implement single flashcard generation
+        }
+
+        function exportAsCSV(topicId, topicName) {
+            closeModal();
+            alert(`Exporting ${topicName} as CSV`);
+            // Implement CSV export
+        }
+
+        function exportAsPDF(topicId, topicName) {
+            closeModal();
+            alert(`Exporting ${topicName} as PDF`);
+            // Implement PDF export
+        }
+
+        function exportAsExcel(topicId, topicName) {
+            closeModal();
+            alert(`Exporting ${topicName} as Excel`);
+            // Implement Excel export
+        }
+
+        function showCompetencyDistribution(topicId, topicName) {
+            closeModal();
+            alert(`Showing competency distribution for: ${topicName}`);
+            // Implement competency distribution analysis
+        }
+
+        function showDifficultyAnalysis(topicId, topicName) {
+            closeModal();
+            alert(`Showing difficulty analysis for: ${topicName}`);
+            // Implement difficulty analysis
+        }
+
+        function generateTopicReport(topicId, topicName) {
+            closeModal();
+            alert(`Generating report for: ${topicName}`);
+            // Implement report generation
         }
 
         function copyToClipboard() {
