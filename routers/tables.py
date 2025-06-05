@@ -8,13 +8,40 @@ import time
 import json
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 router = APIRouter(prefix="/api/tables", tags=["tables"])
 
 # Table extraction cache utilities
 TABLE_CACHE_DIR = Path("cache/table-extractions")
 TABLE_CACHE_MAP = TABLE_CACHE_DIR / "cache_map.json"
+
+# Topic references directory
+TOPIC_REFERENCES_DIR = Path("cache/topic-references")
+TOPIC_REFERENCES_MAP = TOPIC_REFERENCES_DIR / "references_map.json"
+
+def ensure_topic_references_dir():
+    """Ensure topic references directory exists"""
+    TOPIC_REFERENCES_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_topic_references_map():
+    """Load the topic references mapping"""
+    if not TOPIC_REFERENCES_MAP.exists():
+        return {}
+    try:
+        with open(TOPIC_REFERENCES_MAP, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+def save_topic_references_map(references_map):
+    """Save the topic references mapping"""
+    ensure_topic_references_dir()
+    try:
+        with open(TOPIC_REFERENCES_MAP, 'w') as f:
+            json.dump(references_map, f, indent=2)
+    except IOError as e:
+        print(f"Error saving topic references map: {e}")
 
 def ensure_table_cache_dir():
     """Ensure table cache directory exists"""
@@ -544,7 +571,7 @@ async def clear_table_cache(filename: str):
                 "success": False,
                 "message": f"Error clearing cache: {str(e)}"
             }
-        ) 
+        )
 
 @router.post("/process/")
 async def process_table(
@@ -743,5 +770,313 @@ async def process_table(
             content={
                 "success": False,
                 "message": f"Error processing table: {str(e)}"
+            }
+        )
+
+@router.get("/cached-files/")
+async def list_cached_files():
+    """List all cached table extraction files in the format expected by the frontend."""
+    try:
+        cache_map = load_table_cache_map()
+        cached_files = []
+        
+        for filename, cache_entry in cache_map.items():
+            try:
+                # Load JSON data to get metadata
+                json_file = cache_entry.get('json_file')
+                if json_file and os.path.exists(json_file):
+                    with open(json_file, 'r') as f:
+                        json_data = json.load(f)
+                    
+                    # Extract metadata
+                    department = json_data.get('department', 'Unknown Department')
+                    topics = json_data.get('topics', [])
+                    topics_count = len(topics)
+                    competencies_count = sum(len(topic.get('competencies', [])) for topic in topics)
+                    
+                    # Generate file ID from the JSON filename
+                    file_id = Path(json_file).stem
+                    
+                    cached_files.append({
+                        "id": file_id,
+                        "filename": filename,
+                        "processedDate": cache_entry.get('cached_at', 'unknown'),
+                        "department": department,
+                        "topicsCount": topics_count,
+                        "competenciesCount": competencies_count
+                    })
+            except Exception as e:
+                print(f"Error processing cache entry for {filename}: {e}")
+                continue
+        
+        return JSONResponse(content=cached_files)
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error listing cached files: {str(e)}"
+            }
+        )
+
+@router.get("/cached-files/{file_id}/")
+async def get_cached_file(file_id: str):
+    """Get a specific cached file's data by file ID."""
+    try:
+        cache_map = load_table_cache_map()
+        
+        # Find the cache entry that matches the file_id
+        matching_entry = None
+        matching_filename = None
+        
+        for filename, cache_entry in cache_map.items():
+            json_file = cache_entry.get('json_file')
+            if json_file and Path(json_file).stem == file_id:
+                matching_entry = cache_entry
+                matching_filename = filename
+                break
+        
+        if not matching_entry:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": f"Cached file with ID {file_id} not found"
+                }
+            )
+        
+        # Load the cached data
+        cached_data = get_table_cache(matching_filename)
+        if not cached_data:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": f"Cache data not found or corrupted for {file_id}"
+                }
+            )
+        
+        # Extract metadata from the JSON data
+        json_data = cached_data['json_data']
+        department = json_data.get('department', 'Unknown Department')
+        topics = json_data.get('topics', [])
+        topics_count = len(topics)
+        competencies_count = sum(len(topic.get('competencies', [])) for topic in topics)
+        
+        return JSONResponse(content={
+            "id": file_id,
+            "filename": matching_filename,
+            "processedDate": cached_data['cached_at'],
+            "department": department,
+            "topicsCount": topics_count,
+            "competenciesCount": competencies_count,
+            "data": json_data
+        })
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error loading cached file: {str(e)}"
+            }
+        )
+
+@router.post("/topics/{topic_id}/references/")
+async def attach_reference_to_topic(
+    topic_id: str,
+    files: list[UploadFile] = File(...),
+    description: str = Form("")
+):
+    """Attach one or more reference documents to a specific topic."""
+    try:
+        ensure_topic_references_dir()
+        
+        # Create topic-specific directory
+        topic_dir = TOPIC_REFERENCES_DIR / topic_id
+        topic_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Update references map
+        references_map = load_topic_references_map()
+        if topic_id not in references_map:
+            references_map[topic_id] = []
+        
+        uploaded_references = []
+        
+        # Process each file
+        for file in files:
+            # Generate unique filename with timestamp
+            timestamp = int(time.time())
+            file_extension = Path(file.filename).suffix
+            safe_filename = f"{timestamp}_{file.filename}"
+            file_path = topic_dir / safe_filename
+            
+            # Save the uploaded file
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            reference_entry = {
+                "id": f"{topic_id}_{timestamp}_{len(uploaded_references)}",
+                "filename": file.filename,
+                "safe_filename": safe_filename,
+                "description": description,
+                "file_path": str(file_path),
+                "size": file_path.stat().st_size,
+                "uploaded_at": time.strftime('%Y-%m-%d %H:%M:%S'),
+                "mime_type": file.content_type
+            }
+            
+            references_map[topic_id].append(reference_entry)
+            uploaded_references.append(reference_entry)
+            
+            # Small delay to ensure unique timestamps
+            time.sleep(0.01)
+        
+        save_topic_references_map(references_map)
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": f"{len(uploaded_references)} reference document(s) attached to topic {topic_id}",
+            "references": uploaded_references,
+            "count": len(uploaded_references)
+        })
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error attaching reference(s): {str(e)}"
+            }
+        )
+
+@router.get("/topics/{topic_id}/references/")
+async def list_topic_references(topic_id: str):
+    """List all reference documents for a specific topic."""
+    try:
+        references_map = load_topic_references_map()
+        topic_references = references_map.get(topic_id, [])
+        
+        # Filter out references where files no longer exist
+        valid_references = []
+        for ref in topic_references:
+            if os.path.exists(ref.get('file_path', '')):
+                valid_references.append(ref)
+        
+        # Update map if we removed any invalid references
+        if len(valid_references) != len(topic_references):
+            references_map[topic_id] = valid_references
+            save_topic_references_map(references_map)
+        
+        return JSONResponse(content={
+            "success": True,
+            "topic_id": topic_id,
+            "references": valid_references
+        })
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error listing references: {str(e)}"
+            }
+        )
+
+@router.get("/topics/{topic_id}/references/{reference_id}/download/")
+async def download_topic_reference(topic_id: str, reference_id: str):
+    """Download a specific reference document."""
+    try:
+        references_map = load_topic_references_map()
+        topic_references = references_map.get(topic_id, [])
+        
+        # Find the reference
+        reference = None
+        for ref in topic_references:
+            if ref.get('id') == reference_id:
+                reference = ref
+                break
+        
+        if not reference:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": f"Reference {reference_id} not found for topic {topic_id}"
+                }
+            )
+        
+        file_path = reference.get('file_path')
+        if not file_path or not os.path.exists(file_path):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": "Reference file not found"
+                }
+            )
+        
+        return FileResponse(
+            path=file_path,
+            filename=reference.get('filename', 'download'),
+            media_type=reference.get('mime_type', 'application/octet-stream')
+        )
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error downloading reference: {str(e)}"
+            }
+        )
+
+@router.delete("/topics/{topic_id}/references/{reference_id}/")
+async def delete_topic_reference(topic_id: str, reference_id: str):
+    """Delete a reference document from a topic."""
+    try:
+        references_map = load_topic_references_map()
+        topic_references = references_map.get(topic_id, [])
+        
+        # Find and remove the reference
+        reference_to_delete = None
+        updated_references = []
+        
+        for ref in topic_references:
+            if ref.get('id') == reference_id:
+                reference_to_delete = ref
+            else:
+                updated_references.append(ref)
+        
+        if not reference_to_delete:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": f"Reference {reference_id} not found for topic {topic_id}"
+                }
+            )
+        
+        # Delete the file
+        file_path = reference_to_delete.get('file_path')
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Update references map
+        references_map[topic_id] = updated_references
+        save_topic_references_map(references_map)
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": f"Reference {reference_id} deleted from topic {topic_id}"
+        })
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error deleting reference: {str(e)}"
             }
         ) 

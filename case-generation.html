@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assessment Case Generation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .competency-badge {
+            @apply inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-1 mb-1;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <!-- Case Generation Interface -->
+    <div id="caseGenerationContainer" class="max-w-6xl mx-auto p-6">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Create Assessment</h1>
+                    <p class="text-gray-600 mt-1">Generate optimal cases based on competency analysis</p>
+                </div>
+                <button id="closeBtn" class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="bg-white rounded-lg shadow-sm border p-8 text-center hidden">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Analyzing Competencies</h3>
+            <p class="text-gray-600">AI is generating optimal case recommendations...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="bg-red-50 border border-red-200 rounded-lg p-6 hidden">
+            <div class="flex items-center mb-4">
+                <i data-lucide="alert-circle" class="w-6 h-6 text-red-600 mr-3"></i>
+                <h3 class="text-lg font-medium text-red-900">Generation Failed</h3>
+            </div>
+            <p id="errorMessage" class="text-red-700 mb-4"></p>
+            <button id="retryBtn" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors">
+                Try Again
+            </button>
+        </div>
+
+        <!-- Results State -->
+        <div id="resultsState" class="hidden fade-in">
+            <!-- Topic Overview -->
+            <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold text-gray-900" id="topicTitle"></h2>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-600">
+                            <span id="totalCompetencies" class="font-medium"></span> Competencies
+                        </span>
+                        <div id="coverageBadge" class="px-3 py-1 rounded-full text-sm font-medium"></div>
+                    </div>
+                </div>
+
+                <!-- Coverage Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <div class="text-2xl font-bold text-green-800" id="coveredCount"></div>
+                        <div class="text-green-600 text-sm">Competencies Covered</div>
+                    </div>
+                    <div class="bg-orange-50 p-4 rounded-lg">
+                        <div class="text-2xl font-bold text-orange-800" id="notCoveredCount"></div>
+                        <div class="text-orange-600 text-sm">Not Covered</div>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="text-2xl font-bold text-blue-800" id="recommendedCases"></div>
+                        <div class="text-blue-600 text-sm">Recommended Cases</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Competency Groups -->
+            <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <i data-lucide="layers" class="w-5 h-5 mr-2"></i>
+                    Competency Groupings
+                </h3>
+                <div id="competencyGroups" class="space-y-4"></div>
+            </div>
+
+            <!-- Recommended Cases -->
+            <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <i data-lucide="file-text" class="w-5 h-5 mr-2"></i>
+                    Recommended Cases
+                </h3>
+                <div id="recommendedCasesList" class="space-y-6"></div>
+            </div>
+
+            <!-- Not Covered Competencies (if any) -->
+            <div id="notCoveredSection" class="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-6 hidden">
+                <h3 class="text-lg font-semibold text-orange-900 mb-4 flex items-center">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i>
+                    Competencies Not Covered
+                </h3>
+                <div id="notCoveredList" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- AI Recommendation -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                <h3 class="text-lg font-semibold text-blue-900 mb-3 flex items-center">
+                    <i data-lucide="brain" class="w-5 h-5 mr-2"></i>
+                    AI Recommendation
+                </h3>
+                <p id="aiRationale" class="text-blue-800 mb-4"></p>
+                <div id="revisionWarning" class="bg-yellow-50 border border-yellow-200 rounded-md p-3 hidden">
+                    <div class="flex items-center mb-2">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-yellow-600 mr-2"></i>
+                        <span class="text-sm font-medium text-yellow-800">Revision Recommended</span>
+                    </div>
+                    <p id="revisionNotes" class="text-sm text-yellow-700"></p>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between bg-white rounded-lg shadow-sm border p-6">
+                <button id="regenerateBtn"
+                    class="flex items-center px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i>
+                    Regenerate Cases
+                </button>
+
+                <div class="flex space-x-3">
+                    <button id="rejectBtn"
+                        class="px-6 py-2 text-red-700 bg-red-100 rounded-md hover:bg-red-200 transition-colors">
+                        Need Revision
+                    </button>
+                    <button id="approveBtn"
+                        class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                        Approve Cases
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CaseGenerationInterface {
+            constructor() {
+                this.currentData = null;
+                this.selectedTopic = null;
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.initializeLucideIcons();
+
+                // Listen for messages from parent window
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'initializeTopic') {
+                        this.showForTopic(event.data.payload);
+                    }
+                });
+            }
+
+            initializeLucideIcons() {
+                lucide.createIcons();
+            }
+
+            bindEvents() {
+                document.getElementById('closeBtn').addEventListener('click', () => this.close());
+                document.getElementById('retryBtn').addEventListener('click', () => this.generateCases());
+                document.getElementById('regenerateBtn').addEventListener('click', () => this.generateCases());
+                document.getElementById('approveBtn').addEventListener('click', () => this.approveCases());
+                document.getElementById('rejectBtn').addEventListener('click', () => this.rejectCases());
+            }
+
+            // Public method to be called from parent application
+            async showForTopic(topicData) {
+                this.selectedTopic = topicData;
+                await this.generateCases();
+            }
+
+            async generateCases() {
+                if (!this.selectedTopic) {
+                    console.error('No topic selected');
+                    return;
+                }
+
+                this.showLoading();
+
+                try {
+                    const response = await fetch('/api/assessment/generate-cases', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            selected_topic: this.selectedTopic
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    this.currentData = data;
+                    this.showResults();
+
+                } catch (error) {
+                    console.error('Error generating cases:', error);
+                    this.showError(error.message);
+                }
+            }
+
+            showLoading() {
+                this.hideAllStates();
+                document.getElementById('loadingState').classList.remove('hidden');
+            }
+
+            showError(message) {
+                this.hideAllStates();
+                document.getElementById('errorMessage').textContent = message;
+                document.getElementById('errorState').classList.remove('hidden');
+            }
+
+            showResults() {
+                if (!this.currentData) return;
+
+                this.hideAllStates();
+                this.populateResults();
+                document.getElementById('resultsState').classList.remove('hidden');
+                this.initializeLucideIcons();
+            }
+
+            hideAllStates() {
+                ['loadingState', 'errorState', 'resultsState'].forEach(id => {
+                    document.getElementById(id).classList.add('hidden');
+                });
+            }
+
+            populateResults() {
+                const data = this.currentData;
+
+                // Topic Overview
+                document.getElementById('topicTitle').textContent = data.topic;
+                document.getElementById('totalCompetencies').textContent = data.totalCompetencies;
+
+                // Coverage Badge
+                const coverageBadge = document.getElementById('coverageBadge');
+                const percentage = data.coverageSummary.coveragePercentage;
+                coverageBadge.textContent = `${percentage.toFixed(1)}% Coverage`;
+
+                if (percentage >= 90) {
+                    coverageBadge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800';
+                } else if (percentage >= 70) {
+                    coverageBadge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800';
+                } else {
+                    coverageBadge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800';
+                }
+
+                // Coverage Summary
+                document.getElementById('coveredCount').textContent = data.coverageSummary.competenciesCovered.length;
+                document.getElementById('notCoveredCount').textContent = data.coverageSummary.competenciesNotCovered.length;
+                document.getElementById('recommendedCases').textContent = data.recommendedCases.length;
+
+                // Competency Groups
+                this.populateCompetencyGroups(data.competencyGroups);
+
+                // Recommended Cases
+                this.populateRecommendedCases(data.recommendedCases);
+
+                // Not Covered Competencies
+                if (data.coverageSummary.competenciesNotCovered.length > 0) {
+                    this.populateNotCovered(data.coverageSummary.competenciesNotCovered);
+                }
+
+                // AI Recommendation
+                document.getElementById('aiRationale').textContent = data.recommendation.rationale;
+
+                if (data.recommendation.needsRevision) {
+                    const revisionSection = document.getElementById('revisionWarning');
+                    revisionSection.classList.remove('hidden');
+                    document.getElementById('revisionNotes').textContent =
+                        data.recommendation.revisionNotes || 'AI recommends reviewing the case selection.';
+                }
+            }
+
+            populateCompetencyGroups(groups) {
+                const container = document.getElementById('competencyGroups');
+                container.innerHTML = '';
+
+                groups.forEach((group, index) => {
+                    const groupElement = document.createElement('div');
+                    groupElement.className = 'border rounded-lg p-4 hover:bg-gray-50 transition-colors';
+
+                    groupElement.innerHTML = `
+                        <div class="flex items-start justify-between mb-2">
+                            <h4 class="font-medium text-gray-900">${group.groupName}</h4>
+                            <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                ${group.competencyNumbers.length} competencies
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">${group.theme}</p>
+                        <div class="flex flex-wrap gap-1">
+                            ${group.competencyNumbers.map(num =>
+                        `<span class="competency-badge">${num}</span>`
+                    ).join('')}
+                        </div>
+                    `;
+
+                    container.appendChild(groupElement);
+                });
+            }
+
+            populateRecommendedCases(cases) {
+                const container = document.getElementById('recommendedCasesList');
+                container.innerHTML = '';
+
+                cases.forEach((caseItem, index) => {
+                    const caseElement = document.createElement('div');
+                    caseElement.className = 'border rounded-lg p-6 hover:shadow-md transition-shadow';
+
+                    const settingBadge = caseItem.setting ?
+                        `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>
+                            ${caseItem.setting}
+                        </span>` : '';
+
+                    caseElement.innerHTML = `
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex-1">
+                                <h4 class="text-lg font-semibold text-gray-900 mb-2">${caseItem.caseTitle}</h4>
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <span class="text-sm text-gray-500">Case ${index + 1}</span>
+                                    ${settingBadge}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                            <h5 class="font-medium text-blue-900 mb-2 flex items-center">
+                                <i data-lucide="user" class="w-4 h-4 mr-2"></i>
+                                Clinical Scenario
+                            </h5>
+                            <p class="text-blue-800 text-sm">${caseItem.scenario}</p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h5 class="font-medium text-gray-900 mb-2 flex items-center">
+                                <i data-lucide="target" class="w-4 h-4 mr-2"></i>
+                                Primary Competencies (${caseItem.primaryCompetencies.length})
+                            </h5>
+                            <div class="flex flex-wrap gap-1">
+                                ${caseItem.primaryCompetencies.map(comp =>
+                        `<span class="competency-badge">${comp}</span>`
+                    ).join('')}
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h5 class="font-medium text-gray-900 mb-2 flex items-center">
+                                <i data-lucide="lightbulb" class="w-4 h-4 mr-2"></i>
+                                Educational Rationale
+                            </h5>
+                            <p class="text-gray-700 text-sm">${caseItem.reasoning}</p>
+                        </div>
+                    `;
+
+                    container.appendChild(caseElement);
+                });
+            }
+
+            populateNotCovered(notCovered) {
+                const section = document.getElementById('notCoveredSection');
+                const container = document.getElementById('notCoveredList');
+
+                if (notCovered.length > 0) {
+                    section.classList.remove('hidden');
+                    container.innerHTML = notCovered.map(comp =>
+                        `<span class="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">${comp}</span>`
+                    ).join('');
+                }
+            }
+
+            async approveCases() {
+                if (!this.currentData) return;
+
+                // Send message to parent window
+                window.parent.postMessage({
+                    type: 'casesApproved',
+                    payload: {
+                        topic: this.selectedTopic,
+                        cases: this.currentData.recommendedCases,
+                        analysis: this.currentData
+                    }
+                }, '*');
+
+                this.close();
+            }
+
+            async rejectCases() {
+                if (!this.currentData) return;
+
+                // Send message to parent window
+                window.parent.postMessage({
+                    type: 'casesRejected',
+                    payload: {
+                        topic: this.selectedTopic,
+                        analysis: this.currentData,
+                        reason: 'User requested revision'
+                    }
+                }, '*');
+
+                // Show feedback form or regenerate
+                if (confirm('Would you like to regenerate cases with different parameters?')) {
+                    await this.generateCases();
+                }
+            }
+
+            close() {
+                // Send close message to parent window
+                window.parent.postMessage({
+                    type: 'closeModal'
+                }, '*');
+            }
+
+            // Public method for external integration
+            static create(container, topicData) {
+                const instance = new CaseGenerationInterface();
+                if (container && topicData) {
+                    instance.showForTopic(topicData);
+                }
+                return instance;
+            }
+        }
+
+        // Global instance for easy access
+        window.CaseGenerationInterface = CaseGenerationInterface;
+
+        // Initialize if running standalone
+        if (window.location.search.includes('standalone=true')) {
+            // Test data for standalone testing
+            const testTopic = {
+                topic: "Liver Disease",
+                competencies: [
+                    {
+                        number: "GM5.10",
+                        competency: "Generate a differential diagnosis and prioritize based on clinical features that suggest a specific aetiology for the presenting symptom in patient with liver disease",
+                        teaching_methods: ["Bedside clinic", "SGT"],
+                        assessment_methods: ["Long/short case", "Documentation in Journal"]
+                    },
+                    {
+                        number: "GM5.11",
+                        competency: "Choose and interpret appropriate diagnostic tests including: CBC, bilirubin, liver function tests, Hepatitis serology and ascitic fluid examination in patient with liver diseases",
+                        teaching_methods: ["Bedside clinic", "SGT", "Tutorial"],
+                        assessment_methods: ["OSCE", "Viva Voce"]
+                    }
+                ]
+            };
+
+            const interface = new CaseGenerationInterface();
+            interface.showForTopic(testTopic);
+        }
+    </script>
+</body>
+
+</html>

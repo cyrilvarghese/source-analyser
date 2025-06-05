@@ -9,51 +9,59 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
-<body class="bg-gray-100 min-h-screen py-8">
+<body class="bg-slate-100 min-h-screen py-8">
     <div class="max-w-7xl mx-auto px-4">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Table Extractor & Tree Viewer</h1>
-            <p class="text-gray-600">Upload an image or PDF containing tables to extract data and view as interactive
+            <h1 class="text-3xl font-bold text-slate-700 mb-2">Table Extractor & Tree Viewer</h1>
+            <p class="text-slate-600">Upload an image or PDF containing tables to extract data and view as interactive
                 tree</p>
         </div>
 
         <!-- Upload Form -->
         <div class="bg-white rounded-lg shadow-md p-8">
+            <!-- Cached Files Section -->
+            <div class="mb-8 border-b border-slate-200 pb-6">
+                <h3 class="text-lg font-medium text-slate-700 mb-4">
+                    <i class="fas fa-history mr-2"></i>Recently Processed Files
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cachedFilesList">
+                    <!-- Cached files will be loaded here -->
+                </div>
+            </div>
+
             <form id="uploadForm" enctype="multipart/form-data">
                 <!-- File Upload Area -->
                 <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <label class="block text-sm font-medium text-slate-600 mb-2">
                         Select File
                     </label>
-                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors"
+                    <div class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 hover:bg-slate-50 transition-colors"
                         id="dropArea">
-                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
-                        <p class="text-lg text-gray-600 mb-2">Drag and drop your file here</p>
-                        <p class="text-sm text-gray-500 mb-4">or</p>
+                        <i class="fas fa-cloud-upload-alt text-4xl text-slate-400 mb-4"></i>
+                        <p class="text-lg text-slate-600 mb-2">Drag and drop your file here</p>
+                        <p class="text-sm text-slate-500 mb-4">or</p>
                         <input type="file" id="fileInput" name="file" accept=".png,.jpg,.jpeg,.pdf" class="hidden">
                         <button type="button" id="selectBtn"
-                            class="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                            class="bg-stone-600 text-white px-6 py-2 rounded-md hover:bg-stone-700 transition-colors">
                             Choose File
                         </button>
                     </div>
                     <div id="fileInfo" class="mt-4 hidden">
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <p class="text-sm text-blue-800">
+                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            <p class="text-sm text-slate-700">
                                 <i class="fas fa-file mr-2"></i>
                                 <strong>Selected:</strong> <span id="fileName"></span>
                             </p>
-                            <p class="text-xs text-blue-600 mt-1" id="fileSize"></p>
+                            <p class="text-xs text-slate-500 mt-1" id="fileSize"></p>
                         </div>
                     </div>
                 </div>
 
-                <!-- API Key is now configured in backend -->
-
                 <!-- Submit Button -->
                 <div class="text-center">
                     <button type="submit" id="submitBtn" disabled
-                        class="bg-green-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        class="bg-stone-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-stone-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed">
                         <i class="fas fa-code mr-2"></i>
                         Extract to JSON
                     </button>
@@ -62,13 +70,13 @@
 
             <!-- Loading State -->
             <div id="loading" class="hidden text-center py-8">
-                <i class="fas fa-spinner fa-spin text-3xl text-blue-500 mb-4"></i>
-                <p class="text-gray-600">Processing your file...</p>
+                <i class="fas fa-spinner fa-spin text-3xl text-slate-500 mb-4"></i>
+                <p class="text-slate-600">Processing your file...</p>
             </div>
 
             <!-- Results -->
             <div id="results" class="hidden mt-8">
-                <h3 class="text-lg font-medium text-gray-800 mb-4">Results</h3>
+                <h3 class="text-lg font-medium text-slate-700 mb-4">Results</h3>
                 <div id="resultContent">
                     <!-- Results will be displayed here -->
                 </div>
@@ -77,7 +85,7 @@
 
         <!-- Back Button -->
         <div class="text-center mt-6">
-            <a href="index.html" class="text-blue-600 hover:text-blue-800 transition-colors">
+            <a href="index.html" class="text-stone-600 hover:text-stone-800 transition-colors">
                 <i class="fas fa-arrow-left mr-2"></i>
                 Back to Home
             </a>
@@ -85,6 +93,130 @@
     </div>
 
     <script>
+        // Load cached files on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            loadCachedFiles();
+        });
+
+        async function loadCachedFiles() {
+            const cachedFilesList = document.getElementById('cachedFilesList');
+
+            try {
+                // Show loading state
+                cachedFilesList.innerHTML = `
+                    <div class="col-span-full text-center py-8 text-slate-500">
+                        <i class="fas fa-spinner fa-spin text-3xl mb-2"></i>
+                        <p>Loading cached files...</p>
+                    </div>
+                `;
+
+                // Fetch cached files from backend
+                const response = await fetch('/api/tables/cached-files/');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const cachedFiles = await response.json();
+
+                if (!cachedFiles || cachedFiles.length === 0) {
+                    cachedFilesList.innerHTML = `
+                        <div class="col-span-full text-center py-8 text-slate-500">
+                            <i class="fas fa-folder-open text-3xl mb-2"></i>
+                            <p>No cached files available</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                cachedFilesList.innerHTML = cachedFiles.map(file => `
+                    <div class="border border-slate-200 rounded-lg p-4 hover:border-stone-400 hover:shadow-md transition-all cursor-pointer" onclick="loadCachedFile('${file.id}')">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-slate-900 text-sm truncate">${file.filename}</h4>
+                                <p class="text-xs text-slate-500 mt-1">${file.department || 'Unknown Department'}</p>
+                            </div>
+                            <i class="fas fa-file-alt text-stone-500"></i>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs text-slate-600">
+                                <span>Topics:</span>
+                                <span class="font-medium">${file.topicsCount || 0}</span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-600">
+                                <span>Competencies:</span>
+                                <span class="font-medium">${file.competenciesCount || 0}</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-2">
+                                <i class="fas fa-clock mr-1"></i>${formatDate(file.processedDate)}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading cached files:', error);
+                cachedFilesList.innerHTML = `
+                    <div class="col-span-full text-center py-8 text-red-500">
+                        <i class="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                        <p>Error loading cached files</p>
+                        <p class="text-xs mt-1">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadCachedFile(fileId) {
+            try {
+                // Show loading in results area
+                const results = document.getElementById('results');
+                results.classList.remove('hidden');
+                const resultContent = document.getElementById('resultContent');
+                resultContent.innerHTML = `
+                    <div class="text-center py-8">
+                        <i class="fas fa-spinner fa-spin text-3xl text-slate-500 mb-4"></i>
+                        <p class="text-slate-600">Loading cached file...</p>
+                    </div>
+                `;
+
+                // Fetch the specific cached file data
+                const response = await fetch(`/api/tables/cached-files/${fileId}/`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const fileData = await response.json();
+
+                // Simulate the result structure that showResults expects
+                const result = {
+                    success: true,
+                    tables_found: fileData.topicsCount || (fileData.data?.topics ? fileData.data.topics.length : 0),
+                    processing_time: 'cached',
+                    json_data: fileData.data
+                };
+
+                // Show the results
+                showResults(result);
+
+                // Scroll to results
+                document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error loading cached file:', error);
+                showError(`Failed to load cached file: ${error.message}`);
+            }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        }
+
         // Get DOM elements
         const fileInput = document.getElementById('fileInput');
         const selectBtn = document.getElementById('selectBtn');
@@ -104,17 +236,17 @@
         // Drag and drop
         dropArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            dropArea.classList.add('border-blue-400', 'bg-blue-50');
+            dropArea.classList.add('border-stone-400', 'bg-stone-50');
         });
 
         dropArea.addEventListener('dragleave', (e) => {
             e.preventDefault();
-            dropArea.classList.remove('border-blue-400', 'bg-blue-50');
+            dropArea.classList.remove('border-stone-400', 'bg-stone-50');
         });
 
         dropArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            dropArea.classList.remove('border-blue-400', 'bg-blue-50');
+            dropArea.classList.remove('border-stone-400', 'bg-stone-50');
 
             const files = e.dataTransfer.files;
             if (files.length > 0) {
@@ -127,13 +259,10 @@
             const file = fileInput.files[0];
 
             if (file) {
-                // Show file info
                 fileName.textContent = file.name;
                 const fileSize = document.getElementById('fileSize');
                 fileSize.textContent = `Size: ${formatFileSize(file.size)} • Type: ${file.type}`;
                 fileInfo.classList.remove('hidden');
-
-                // Enable submit button when file is selected
                 submitBtn.disabled = false;
             } else {
                 fileInfo.classList.add('hidden');
@@ -149,8 +278,6 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        // API key is now configured in backend environment
-
         // Form submission
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -163,15 +290,11 @@
                 return;
             }
 
-            // Show loading
             uploadForm.classList.add('hidden');
             loading.classList.remove('hidden');
 
             try {
-                // Add file to form data
                 formData.append('file', file);
-
-                // Make request to new JSON extraction endpoint
                 const response = await fetch('/api/tables/extract-json/', {
                     method: 'POST',
                     body: formData
@@ -194,12 +317,23 @@
         });
 
         function showResults(result) {
-            const resultContent = document.getElementById('resultContent');
+            uploadForm.classList.remove('hidden');
+            results.classList.remove('hidden');
 
+            // Store the data globally for case generation
+            window.currentJsonData = result.json_data;
+            console.log('Stored data globally:', window.currentJsonData);
+
+            // Reset the file input and related UI
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            submitBtn.disabled = true;
+
+            const resultContent = document.getElementById('resultContent');
             let html = `
-                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                    <h4 class="text-green-800 font-medium">✅ Processing Complete</h4>
-                    <p class="text-green-700 text-sm">Found ${result.tables_found} table(s) in ${result.processing_time}</p>
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+                    <h4 class="text-slate-700 font-medium">✅ Processing Complete</h4>
+                    <p class="text-slate-600 text-sm">Found ${result.tables_found} table(s) in ${result.processing_time}</p>
                 </div>
             `;
 
@@ -207,27 +341,27 @@
                 // Create tabbed interface for different views
                 html += `
                     <div class="mt-4">
-                                                <!-- Tab Navigation -->
-                        <div class="flex border-b border-gray-200 mb-4">
-                            <button onclick="showTab('table')" id="tableTab" class="px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600">
+                        <!-- Tab Navigation -->
+                        <div class="flex border-b border-slate-200 mb-4">
+                            <button onclick="showTab('table')" id="tableTab" class="px-4 py-2 font-medium text-slate-600 border-b-2 border-slate-600">
                                 <i class="fas fa-table mr-2"></i>Table View
                             </button>
-                            <button onclick="showTab('json')" id="jsonTab" class="px-4 py-2 font-medium text-gray-500 hover:text-gray-700">
+                            <button onclick="showTab('json')" id="jsonTab" class="px-4 py-2 font-medium text-slate-500 hover:text-slate-700">
                                 <i class="fas fa-code mr-2"></i>Raw JSON
                             </button>
                         </div>
 
                         <!-- Table View Tab -->
                         <div id="tableView" class="tab-content">
-                            <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                <div class="bg-gray-50 p-4 border-b border-gray-200 flex items-center justify-between">
+                            <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                                <div class="bg-slate-50 p-4 border-b border-slate-200 flex items-center justify-between">
                                     <div>
                                         <h5 class="font-medium text-xl">${result.json_data.department || 'Department'}</h5>
-                                        <p class="text-sm text-gray-600">${getTotalCompetencies(result.json_data)} competencies across ${result.json_data.topics ? result.json_data.topics.length : 0} topics</p>
+                                        <p class="text-sm text-slate-600">${getTotalCompetencies(result.json_data)} competencies across ${result.json_data.topics ? result.json_data.topics.length : 0} topics</p>
                                     </div>
                                     <div class="flex items-center space-x-2">
-                                        <input type="text" id="searchInput" placeholder="Search competencies..." class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                        <button onclick="exportAllTopics()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm transition-colors duration-200">
+                                        <input type="text" id="searchInput" placeholder="Search competencies..." class="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-stone-500">
+                                        <button onclick="exportAllTopics()" class="bg-stone-600 hover:bg-stone-700 text-white px-4 py-2 rounded-md text-sm transition-colors duration-200">
                                             <i class="fas fa-download mr-2"></i>Export All
                                         </button>
                                     </div>
@@ -240,14 +374,14 @@
 
                         <!-- JSON View Tab -->
                         <div id="jsonView" class="tab-content hidden">
-                            <div class="bg-white border border-gray-200 rounded-lg p-4">
+                            <div class="bg-white border border-slate-200 rounded-lg p-4">
                                 <div class="flex items-center justify-between mb-4">
                                     <h5 class="font-medium text-lg">Raw JSON Output</h5>
-                                    <button onclick="copyToClipboard()" class="bg-blue-500 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-600 transition-colors duration-200">
+                                    <button onclick="copyToClipboard()" class="bg-stone-600 text-white px-4 py-2 rounded-md text-sm hover:bg-stone-700 transition-colors duration-200">
                                         <i class="fas fa-copy mr-2"></i>Copy JSON
                                     </button>
                                 </div>
-                                <pre id="jsonOutput" class="bg-gray-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap font-mono">${JSON.stringify(result.json_data, null, 2)}</pre>
+                                <pre id="jsonOutput" class="bg-slate-900 text-slate-300 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap font-mono">${JSON.stringify(result.json_data, null, 2)}</pre>
                             </div>
                         </div>
                     </div>
@@ -255,7 +389,6 @@
             }
 
             resultContent.innerHTML = html;
-            results.classList.remove('hidden');
         }
 
         function generateTableHTML(data) {
@@ -268,7 +401,7 @@
 
             if (!data.topics || !Array.isArray(data.topics)) {
                 console.warn('No topics array found. Data structure:', Object.keys(data));
-                return '<div class="p-8 text-center text-gray-500">No topics found in the data.</div>';
+                return '<div class="p-8 text-center text-slate-500">No topics found in the data.</div>';
             }
 
             console.log(`Found ${data.topics.length} topics:`, data.topics.map(t => t.topic));
@@ -279,28 +412,51 @@
 
                 // Topic header row
                 tableHTML += `
-                    <div class="bg-gray-100 border-b border-gray-300">
+                    <div class="bg-slate-100 border-b border-slate-300">
                         <div class="flex items-center justify-between p-4">
                             <div class="flex items-center space-x-2">
-                                <h3 class="font-semibold text-gray-800 text-lg">${escapeHtml(topic.topic)}</h3>
-                                <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                                <h3 class="font-semibold text-slate-800 text-lg">${escapeHtml(topic.topic)}</h3>
+                                <span class="bg-slate-200 text-slate-700 text-xs px-2 py-1 rounded-full">
                                     ${topic.competencies ? topic.competencies.length : 0} competencies
+                                </span>
+                                <span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full" id="refCount-${topicId}">
+                                    0 references
                                 </span>
                             </div>
                             <div class="flex space-x-2">
-                                <button onclick="createCases('${topicId}', '${escapeHtml(topic.topic)}')" 
-                                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
-                                    <i class="fas fa-plus-circle mr-1"></i>Add ${escapeHtml(topic.topic)}
+                                <button onclick="toggleReferences('${topicId}', '${escapeHtml(topic.topic)}')" 
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+                                    <i class="fas fa-paperclip mr-1"></i>References
                                 </button>
+                                <button onclick="createAssessment('${topicId}', '${escapeHtml(topic.topic)}')" 
+                                        class="bg-stone-600 hover:bg-stone-700 text-white px-3 py-1 rounded text-sm">
+                                    <i class="fas fa-plus-circle mr-1"></i>Create Assessment
+                                </button>
+                            </div>
+                        </div>
+                        <!-- References Section (Initially Hidden) -->
+                        <div id="references-${topicId}" class="hidden border-t border-slate-200 bg-slate-50 p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-medium text-slate-700">Reference Documents</h4>
+                                <button onclick="showAddReferenceModal('${topicId}', '${escapeHtml(topic.topic)}')" 
+                                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
+                                    <i class="fas fa-plus mr-1"></i>Add Reference
+                                </button>
+                            </div>
+                            <div id="referencesList-${topicId}" class="space-y-2">
+                                <!-- References will be loaded here -->
                             </div>
                         </div>
                     </div>
                 `;
 
+                // Load references count for this topic
+                loadTopicReferences(topicId);
+
                 // Table header for this topic
                 tableHTML += `
-                    <div class="bg-gray-50 border-b border-gray-200">
-                        <div class="grid grid-cols-12 gap-4 p-3 text-sm font-medium text-gray-700 uppercase tracking-wide">
+                    <div class="bg-slate-50 border-b border-slate-200">
+                        <div class="grid grid-cols-12 gap-4 p-3 text-sm font-medium text-slate-700 uppercase tracking-wide">
                             <div class="col-span-1">CODE</div>
                             <div class="col-span-4">COMPETENCY</div>
                             <div class="col-span-3">TEACHING</div>
@@ -318,46 +474,46 @@
                         console.log(`Processing competency ${compIndex}:`, competency);
 
                         tableHTML += `
-                            <div class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-200 competency-row" data-search="${escapeHtml(competency.number + ' ' + competency.competency).toLowerCase()}">
+                            <div class="border-b border-slate-200 hover:bg-slate-50 transition-colors duration-200 competency-row" data-search="${escapeHtml(competency.number + ' ' + competency.competency).toLowerCase()}">
                                 <div class="grid grid-cols-12 gap-4 p-4 items-start">
                                     <div class="col-span-1">
-                                        <span class="font-medium text-gray-800">${escapeHtml(competency.number || '')}</span>
+                                        <span class="font-medium text-slate-800">${escapeHtml(competency.number || '')}</span>
                                     </div>
                                     <div class="col-span-4">
-                                        <p class="text-gray-800 text-sm leading-relaxed">${escapeHtml(competency.competency || '')}</p>
+                                        <p class="text-slate-800 text-sm leading-relaxed">${escapeHtml(competency.competency || '')}</p>
                                     </div>
                                     <div class="col-span-3">
                                         <div class="flex flex-wrap gap-1">
                                             ${(competency.teaching_methods || []).map(method =>
-                            `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
+                            `<span class="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
                         ).join('')}
                                         </div>
                                     </div>
                                     <div class="col-span-3">
                                         <div class="flex flex-wrap gap-1">
                                             ${(competency.assessment_methods || []).map(method =>
-                            `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
+                            `<span class="bg-stone-100 text-stone-700 text-xs px-2 py-1 rounded">${escapeHtml(method)}</span>`
                         ).join('')}
                                         </div>
                                     </div>
                                     <div class="col-span-1 text-center">
                                         <div class="relative inline-block text-left">
                                             <button onclick="showActionDropdown('${compId}')" 
-                                                    class="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-md text-sm transition-colors duration-200">
+                                                    class="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-md text-sm transition-colors duration-200">
                                                 <i class="fas fa-ellipsis-v"></i>
                                             </button>
-                                            <div id="dropdown-${compId}" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                                            <div id="dropdown-${compId}" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-slate-200">
                                                 <div class="py-1">
                                                     <button onclick="createCase('${compId}', '${escapeHtml(competency.number || 'Unknown')}')" 
-                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                            class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">
                                                         <i class="fas fa-plus mr-2"></i>Add Assessment
                                                     </button>
                                                     <button onclick="editCompetency('${compId}')" 
-                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                            class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">
                                                         <i class="fas fa-edit mr-2"></i>Edit
                                                     </button>
                                                     <button onclick="duplicateCompetency('${compId}')" 
-                                                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                                            class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">
                                                         <i class="fas fa-copy mr-2"></i>Duplicate
                                                     </button>
                                                 </div>
@@ -370,7 +526,7 @@
                     });
                 } else {
                     tableHTML += `
-                        <div class="p-8 text-center text-gray-500 italic">
+                        <div class="p-8 text-center text-slate-500 italic">
                             No competencies found for this topic.
                         </div>
                     `;
@@ -423,12 +579,12 @@
         function showTab(tabName) {
             // Update tab buttons
             document.getElementById('tableTab').className = tabName === 'table'
-                ? 'px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600'
-                : 'px-4 py-2 font-medium text-gray-500 hover:text-gray-700';
+                ? 'px-4 py-2 font-medium text-slate-600 border-b-2 border-slate-600'
+                : 'px-4 py-2 font-medium text-slate-500 hover:text-slate-700';
 
             document.getElementById('jsonTab').className = tabName === 'json'
-                ? 'px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600'
-                : 'px-4 py-2 font-medium text-gray-500 hover:text-gray-700';
+                ? 'px-4 py-2 font-medium text-slate-600 border-b-2 border-slate-600'
+                : 'px-4 py-2 font-medium text-slate-500 hover:text-slate-700';
 
             // Show/hide content
             document.getElementById('tableView').className = tabName === 'table' ? 'tab-content' : 'tab-content hidden';
@@ -455,158 +611,6 @@
             }
         });
 
-        function exportAllTopics() {
-            alert('Exporting all topics...');
-            // Implement export functionality
-        }
-
-        function duplicateCompetency(compId) {
-            alert(`Duplicating competency: ${compId}`);
-            // Implement duplicate functionality
-        }
-
-        // Action functions
-        function createCases(topicId, topicName) {
-            showActionModal('Create Cases', `Creating cases for topic: <strong>${topicName}</strong>`, [
-                { label: 'Generate MCQs', action: () => generateMCQs(topicId, topicName), color: 'blue' },
-                { label: 'Create Scenarios', action: () => createScenarios(topicId, topicName), color: 'green' },
-                { label: 'Generate Flashcards', action: () => generateFlashcards(topicId, topicName), color: 'purple' }
-            ]);
-        }
-
-        function createCase(compId, competencyCode) {
-            showActionModal('Create Case', `Creating case for competency: <strong>${competencyCode}</strong>`, [
-                { label: 'Single MCQ', action: () => generateSingleMCQ(compId, competencyCode), color: 'blue' },
-                { label: 'Case Scenario', action: () => createSingleScenario(compId, competencyCode), color: 'green' },
-                { label: 'Flashcard', action: () => generateSingleFlashcard(compId, competencyCode), color: 'purple' }
-            ]);
-        }
-
-        function exportTopic(topicId, topicName) {
-            showActionModal('Export Topic', `Export options for: <strong>${topicName}</strong>`, [
-                { label: 'Export as CSV', action: () => exportAsCSV(topicId, topicName), color: 'green' },
-                { label: 'Export as PDF', action: () => exportAsPDF(topicId, topicName), color: 'red' },
-                { label: 'Export as Excel', action: () => exportAsExcel(topicId, topicName), color: 'blue' }
-            ]);
-        }
-
-        function analyzeTopic(topicId, topicName) {
-            showActionModal('Analyze Topic', `Analysis options for: <strong>${topicName}</strong>`, [
-                { label: 'Competency Distribution', action: () => showCompetencyDistribution(topicId, topicName), color: 'purple' },
-                { label: 'Difficulty Analysis', action: () => showDifficultyAnalysis(topicId, topicName), color: 'orange' },
-                { label: 'Generate Report', action: () => generateTopicReport(topicId, topicName), color: 'gray' }
-            ]);
-        }
-
-        function editCompetency(compId) {
-            alert(`Edit competency: ${compId}`);
-            // Implement edit functionality
-        }
-
-        function showActionModal(title, description, actions) {
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                    <h3 class="text-lg font-semibold mb-2">${title}</h3>
-                    <p class="text-gray-600 mb-4">${description}</p>
-                    <div class="space-y-2">
-                        ${actions.map(action => `
-                            <button onclick="${action.action.toString().replace('function ', '').replace('()', '()')}" 
-                                    class="w-full bg-${action.color}-600 hover:bg-${action.color}-700 text-white px-4 py-2 rounded-md transition-colors duration-200">
-                                ${action.label}
-                            </button>
-                        `).join('')}
-                    </div>
-                    <button onclick="closeModal()" class="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md transition-colors duration-200">
-                        Cancel
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            window.currentModal = modal;
-        }
-
-        function closeModal() {
-            if (window.currentModal) {
-                document.body.removeChild(window.currentModal);
-                window.currentModal = null;
-            }
-        }
-
-        // Placeholder functions for actions
-        function generateMCQs(topicId, topicName) {
-            closeModal();
-            alert(`Generating MCQs for topic: ${topicName}`);
-            // Implement MCQ generation
-        }
-
-        function createScenarios(topicId, topicName) {
-            closeModal();
-            alert(`Creating scenarios for topic: ${topicName}`);
-            // Implement scenario creation
-        }
-
-        function generateFlashcards(topicId, topicName) {
-            closeModal();
-            alert(`Generating flashcards for topic: ${topicName}`);
-            // Implement flashcard generation
-        }
-
-        function generateSingleMCQ(compId, competencyCode) {
-            closeModal();
-            alert(`Generating MCQ for competency: ${competencyCode}`);
-            // Implement single MCQ generation
-        }
-
-        function createSingleScenario(compId, competencyCode) {
-            closeModal();
-            alert(`Creating scenario for competency: ${competencyCode}`);
-            // Implement single scenario creation
-        }
-
-        function generateSingleFlashcard(compId, competencyCode) {
-            closeModal();
-            alert(`Generating flashcard for competency: ${competencyCode}`);
-            // Implement single flashcard generation
-        }
-
-        function exportAsCSV(topicId, topicName) {
-            closeModal();
-            alert(`Exporting ${topicName} as CSV`);
-            // Implement CSV export
-        }
-
-        function exportAsPDF(topicId, topicName) {
-            closeModal();
-            alert(`Exporting ${topicName} as PDF`);
-            // Implement PDF export
-        }
-
-        function exportAsExcel(topicId, topicName) {
-            closeModal();
-            alert(`Exporting ${topicName} as Excel`);
-            // Implement Excel export
-        }
-
-        function showCompetencyDistribution(topicId, topicName) {
-            closeModal();
-            alert(`Showing competency distribution for: ${topicName}`);
-            // Implement competency distribution analysis
-        }
-
-        function showDifficultyAnalysis(topicId, topicName) {
-            closeModal();
-            alert(`Showing difficulty analysis for: ${topicName}`);
-            // Implement difficulty analysis
-        }
-
-        function generateTopicReport(topicId, topicName) {
-            closeModal();
-            alert(`Generating report for: ${topicName}`);
-            // Implement report generation
-        }
-
         function copyToClipboard() {
             const jsonOutput = document.getElementById('jsonOutput');
             const text = jsonOutput.textContent;
@@ -619,6 +623,14 @@
         }
 
         function showError(message) {
+            uploadForm.classList.remove('hidden');
+            results.classList.remove('hidden');
+
+            // Reset the file input and related UI
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            submitBtn.disabled = true;
+
             const resultContent = document.getElementById('resultContent');
             resultContent.innerHTML = `
                 <div class="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -626,10 +638,1673 @@
                     <p class="text-red-700 text-sm">${message}</p>
                 </div>
             `;
-            results.classList.remove('hidden');
-            uploadForm.classList.remove('hidden');
         }
+
+        // Action functions
+        function createAssessment(topicId, topicName) {
+            console.log('createAssessment called with:', { topicId, topicName });
+            console.log('window.currentJsonData:', window.currentJsonData);
+
+            // Get topic data from the current loaded data
+            const currentData = window.currentJsonData;
+            if (!currentData || !currentData.topics) {
+                alert('No topic data available. Please load a document first.');
+                return;
+            }
+
+            // Find the specific topic
+            const topic = currentData.topics.find(t =>
+                t.topic === topicName ||
+                t.topic.replace(/\s+/g, '_').toLowerCase() === topicId.toLowerCase()
+            );
+
+            if (!topic) {
+                alert('Topic data not found.');
+                return;
+            }
+
+            if (!topic.competencies || topic.competencies.length === 0) {
+                alert('No competencies found for this topic.');
+                return;
+            }
+
+            // Show the topic object in a popup
+            showTopicObjectPopup(topic);
+        }
+
+        function showTopicObjectPopup(topic) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-xl font-bold text-gray-900">Create Assessment - Selected Topic</h2>
+                        <button onclick="closeTopicModal()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">Topic: ${topic.topic}</h3>
+                            <p class="text-gray-600">Total Competencies: ${topic.competencies.length}</p>
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                            <h4 class="font-medium text-gray-800 mb-3">Topic Object (JSON):</h4>
+                            <pre class="bg-gray-900 text-green-400 p-4 rounded text-sm overflow-x-auto font-mono max-h-96 overflow-y-auto">${JSON.stringify(topic, null, 2)}</pre>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <h4 class="font-medium text-gray-800">Competencies Summary:</h4>
+                            ${topic.competencies.map((comp, index) => `
+                                <div class="border border-gray-200 rounded-lg p-3">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1">
+                                            <span class="font-semibold text-blue-600">${comp.number}</span>
+                                            <p class="text-sm text-gray-700 mt-1">${comp.competency}</p>
+                                            <div class="mt-2 flex flex-wrap gap-1">
+                                                <span class="text-xs text-gray-500">Teaching:</span>
+                                                ${comp.teaching_methods.map(method =>
+                `<span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded">${method}</span>`
+            ).join('')}
+                                            </div>
+                                            <div class="mt-1 flex flex-wrap gap-1">
+                                                <span class="text-xs text-gray-500">Assessment:</span>
+                                                ${comp.assessment_methods.map(method =>
+                `<span class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded">${method}</span>`
+            ).join('')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 border-t border-gray-200 flex justify-between">
+                        <button onclick="copyTopicJSON()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                            Copy JSON
+                        </button>
+                        <div class="space-x-3">
+                            <button onclick="closeTopicModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
+                                Cancel
+                            </button>
+                            <button onclick="proceedToAssessment()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                                Proceed to Assessment Creation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            window.currentTopicModal = modal;
+            window.currentSelectedTopic = topic;
+        }
+
+        function closeTopicModal() {
+            if (window.currentTopicModal) {
+                document.body.removeChild(window.currentTopicModal);
+                window.currentTopicModal = null;
+                window.currentSelectedTopic = null;
+            }
+        }
+
+        function copyTopicJSON() {
+            const topic = window.currentSelectedTopic;
+            if (topic) {
+                navigator.clipboard.writeText(JSON.stringify(topic, null, 2))
+                    .then(() => alert('Topic JSON copied to clipboard!'))
+                    .catch(() => alert('Failed to copy to clipboard'));
+            }
+        }
+
+        async function proceedToAssessment() {
+            const topic = window.currentSelectedTopic;
+            if (!topic) {
+                alert('No topic selected');
+                return;
+            }
+
+            closeTopicModal();
+
+            // Show loading modal
+            showAssessmentLoadingModal(topic.topic);
+
+            try {
+                console.log('Calling assessment API with topic:', topic);
+
+                const response = await fetch('/api/assessment/generate-cases', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        selected_topic: topic
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Assessment API response:', result);
+
+                // Close loading modal
+                closeAssessmentLoadingModal();
+
+                // Show raw JSON response first
+                showRawLLMResponseModal(result, topic.topic);
+
+            } catch (error) {
+                console.error('Error calling assessment API:', error);
+                closeAssessmentLoadingModal();
+                showAssessmentErrorModal(error.message);
+            }
+        }
+
+        function showAssessmentLoadingModal(topicName) {
+            const modal = document.createElement('div');
+            modal.id = 'assessmentLoadingModal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4 text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Analyzing Competencies</h3>
+                    <p class="text-gray-600">AI is generating optimal case recommendations for:</p>
+                    <p class="font-medium text-gray-800 mt-2">${topicName}</p>
+                    <p class="text-sm text-gray-500 mt-4">This may take a few moments...</p>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeAssessmentLoadingModal() {
+            const modal = document.getElementById('assessmentLoadingModal');
+            if (modal) {
+                document.body.removeChild(modal);
+            }
+        }
+
+        function showAssessmentErrorModal(errorMessage) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+                    <div class="flex items-center mb-4">
+                        <svg class="w-6 h-6 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h3 class="text-lg font-semibold text-red-900">Assessment Generation Failed</h3>
+                    </div>
+                    <p class="text-red-700 mb-4">${errorMessage}</p>
+                    <div class="flex justify-end space-x-3">
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                                class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function showRawLLMResponseModal(result, topicName) {
+            // Store the current topic data in the result for future reference
+            if (window.currentSelectedTopic) {
+                result.originalTopicData = window.currentSelectedTopic;
+                console.log('Stored original topic data in result:', result.originalTopicData);
+            }
+
+            window.currentRawLLMResult = result;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">🤖 Raw LLM Response</h2>
+                            <p class="text-sm text-gray-600">Assessment cases generated for: <span class="font-medium">${topicName}</span></p>
+                        </div>
+                        <button onclick="closeRawLLMModal()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800">Complete API Response</h3>
+                                <div class="flex space-x-2">
+                                    <button onclick="copyRawJSON()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
+                                        📋 Copy JSON
+                                    </button>
+                                    <button onclick="downloadRawJSON('${topicName}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm">
+                                        💾 Download
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="bg-gray-900 rounded-lg p-4 text-green-400 font-mono text-sm overflow-auto max-h-96">
+                                <pre id="rawJsonContent">${JSON.stringify(result, null, 2)}</pre>
+                            </div>
+                        </div>
+
+                        <!-- Quick Summary Stats -->
+                        <div class="bg-blue-50 rounded-lg p-4 mb-4">
+                            <h4 class="font-semibold text-blue-900 mb-2">🔍 Quick Analysis</h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-lg font-bold text-green-600">${result.recommendedCases ? result.recommendedCases.length : 0}</div>
+                                    <div class="text-xs text-gray-600">Cases Generated</div>
+                                </div>
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-lg font-bold text-blue-600">${result.competencyGroups ? result.competencyGroups.length : 0}</div>
+                                    <div class="text-xs text-gray-600">Competency Groups</div>
+                                </div>
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-lg font-bold text-orange-600">${result.coverageSummary ? result.coverageSummary.coveragePercentage.toFixed(1) : 0}%</div>
+                                    <div class="text-xs text-gray-600">Coverage</div>
+                                </div>
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-lg font-bold ${result.recommendation && result.recommendation.needsRevision ? 'text-red-600' : 'text-green-600'}">${result.recommendation && result.recommendation.needsRevision ? '⚠️' : '✅'}</div>
+                                    <div class="text-xs text-gray-600">Status</div>
+                                </div>
+                            </div>
+                        </div>
+
+                                                <!-- Revision Alert (if needed) -->
+                        ${result.recommendation && result.recommendation.needsRevision ? `
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h4 class="font-semibold text-yellow-800">⚠️ Revision Needed</h4>
+                                    <button onclick="fixCoverage()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        🔧 Fix Coverage
+                                    </button>
+                                </div>
+                                <p class="text-yellow-700 text-sm mb-2">${result.recommendation.rationale}</p>
+                                <div class="bg-yellow-100 border border-yellow-300 rounded p-3">
+                                    <p class="text-yellow-800 font-medium text-sm">Missing Coverage:</p>
+                                    <p class="text-yellow-700 text-sm">${result.recommendation.revisionNotes}</p>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <!-- Response Structure Preview -->
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-gray-800 mb-2">📋 Response Structure</h4>
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1 text-sm">
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-blue-500 rounded-full"></span>
+                                    <span class="font-mono text-blue-700">topic:</span>
+                                    <span class="text-gray-600">"${result.topic || 'N/A'}"</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-green-500 rounded-full"></span>
+                                    <span class="font-mono text-green-700">totalCompetencies:</span>
+                                    <span class="text-gray-600">${result.totalCompetencies || 0}</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-purple-500 rounded-full"></span>
+                                    <span class="font-mono text-purple-700">competencyGroups:</span>
+                                    <span class="text-gray-600">[${result.competencyGroups ? result.competencyGroups.length : 0} groups]</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-orange-500 rounded-full"></span>
+                                    <span class="font-mono text-orange-700">recommendedCases:</span>
+                                    <span class="text-gray-600">[${result.recommendedCases ? result.recommendedCases.length : 0} cases]</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-red-500 rounded-full"></span>
+                                    <span class="font-mono text-red-700">coverageSummary:</span>
+                                    <span class="text-gray-600">{coverage analysis}</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-4 h-4 bg-yellow-500 rounded-full"></span>
+                                    <span class="font-mono text-yellow-700">recommendation:</span>
+                                    <span class="text-gray-600">{AI recommendations}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 border-t border-gray-200 flex justify-between">
+                        <button onclick="closeRawLLMModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-md">
+                            Close
+                        </button>
+                        <button onclick="proceedToFormattedView()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                            View Formatted Results →
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeRawLLMModal() {
+            const modals = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50');
+            modals.forEach(modal => {
+                if (modal.innerHTML.includes('Raw LLM Response')) {
+                    document.body.removeChild(modal);
+                }
+            });
+        }
+
+        function copyRawJSON() {
+            const result = window.currentRawLLMResult;
+            if (result) {
+                navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+                    .then(() => alert('✅ Raw JSON copied to clipboard!'))
+                    .catch(() => alert('❌ Failed to copy to clipboard'));
+            }
+        }
+
+        function downloadRawJSON(topicName) {
+            const result = window.currentRawLLMResult;
+            if (result) {
+                const dataStr = JSON.stringify(result, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
+                const exportFileDefaultName = `assessment-${topicName.replace(/\s+/g, '_').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`;
+
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            }
+        }
+
+        function proceedToFormattedView() {
+            const result = window.currentRawLLMResult;
+            if (result) {
+                closeRawLLMModal();
+                showAssessmentResultsModal(result);
+            }
+        }
+
+        function showCaseEditor() {
+            const result = window.currentRawLLMResult;
+            if (!result) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">✏️ Edit Assessment Cases</h2>
+                            <p class="text-sm text-gray-600">Customize AI suggestions and add additional cases</p>
+                        </div>
+                        <button onclick="closeCaseEditor()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6">
+                                                 ${result.recommendation && result.recommendation.needsRevision ? `
+                             <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                                 <div class="flex justify-between items-start mb-2">
+                                     <h3 class="font-semibold text-yellow-800">⚠️ Revision Needed</h3>
+                                     <button onclick="fixCoverage()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                         🔧 Fix Coverage
+                                     </button>
+                                 </div>
+                                 <p class="text-yellow-700 text-sm mb-2">${result.recommendation.rationale}</p>
+                                 <div class="bg-yellow-100 border border-yellow-300 rounded p-3">
+                                     <p class="text-yellow-800 font-medium text-sm">Missing Coverage:</p>
+                                     <p class="text-yellow-700 text-sm">${result.recommendation.revisionNotes}</p>
+                                 </div>
+                             </div>
+                         ` : ''}
+
+                        <!-- Current Cases -->
+                        <div class="mb-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-semibold text-gray-800">Current Cases (${result.recommendedCases ? result.recommendedCases.length : 0})</h3>
+                                <button onclick="addNewCase()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                                    <i class="fas fa-plus mr-2"></i>Add New Case
+                                </button>
+                            </div>
+                            <div id="casesContainer" class="space-y-4">
+                                ${result.recommendedCases ? result.recommendedCases.map((caseItem, index) => generateCaseEditor(caseItem, index)).join('') : ''}
+                            </div>
+                        </div>
+
+                        <!-- Coverage Status -->
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-blue-900 mb-2">Coverage Status</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-sm text-blue-800 mb-1">Covered Competencies (${result.coverageSummary ? result.coverageSummary.competenciesCovered.length : 0}):</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        ${result.coverageSummary ? result.coverageSummary.competenciesCovered.map(comp =>
+                `<span class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded">${comp}</span>`
+            ).join('') : ''}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-blue-800 mb-1">Not Covered (${result.coverageSummary ? result.coverageSummary.competenciesNotCovered.length : 0}):</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        ${result.coverageSummary ? result.coverageSummary.competenciesNotCovered.map(comp =>
+                `<span class="bg-red-100 text-red-700 text-xs px-2 py-1 rounded">${comp}</span>`
+            ).join('') : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 border-t border-gray-200 flex justify-between">
+                        <button onclick="closeCaseEditor()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-md">
+                            Cancel
+                        </button>
+                        <div class="space-x-3">
+                            <button onclick="previewUpdatedCases()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                                Preview Changes
+                            </button>
+                            <button onclick="saveUpdatedCases()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-md">
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            window.currentCaseEditorModal = modal;
+        }
+
+        function generateCaseEditor(caseItem, index) {
+            return `
+                <div class="border border-gray-200 rounded-lg p-4 case-editor" data-case-index="${index}">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Case Title</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-title" 
+                                   value="${escapeHtml(caseItem.caseTitle)}" placeholder="Enter case title">
+                        </div>
+                        <button onclick="removeCase(${index})" class="ml-4 text-red-600 hover:text-red-800">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Clinical Scenario</label>
+                        <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-scenario" 
+                                  rows="3" placeholder="Describe the clinical scenario...">${escapeHtml(caseItem.scenario)}</textarea>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Setting</label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-setting">
+                                <option value="">Select setting</option>
+                                <option value="Outpatient" ${caseItem.setting === 'Outpatient' ? 'selected' : ''}>Outpatient</option>
+                                <option value="ED" ${caseItem.setting === 'ED' ? 'selected' : ''}>Emergency Department</option>
+                                <option value="Ward" ${caseItem.setting === 'Ward' ? 'selected' : ''}>Ward</option>
+                                <option value="ICU" ${caseItem.setting === 'ICU' ? 'selected' : ''}>ICU</option>
+                                <option value="Clinic" ${caseItem.setting === 'Clinic' ? 'selected' : ''}>Clinic</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Primary Competencies</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-competencies" 
+                                   value="${caseItem.primaryCompetencies ? caseItem.primaryCompetencies.join(', ') : ''}" 
+                                   placeholder="GM5.10, GM5.11, GM5.12">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Educational Reasoning</label>
+                        <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-reasoning" 
+                                  rows="2" placeholder="Why this case addresses the competencies...">${escapeHtml(caseItem.reasoning)}</textarea>
+                    </div>
+                </div>
+            `;
+        }
+
+        function addNewCase() {
+            const casesContainer = document.getElementById('casesContainer');
+            const newIndex = casesContainer.children.length;
+
+            const newCaseHtml = generateCaseEditor({
+                caseTitle: '',
+                scenario: '',
+                setting: '',
+                primaryCompetencies: [],
+                reasoning: ''
+            }, newIndex);
+
+            casesContainer.insertAdjacentHTML('beforeend', newCaseHtml);
+        }
+
+        function removeCase(index) {
+            const caseElement = document.querySelector(`[data-case-index="${index}"]`);
+            if (caseElement && confirm('Are you sure you want to remove this case?')) {
+                caseElement.remove();
+                // Update indices
+                const remainingCases = document.querySelectorAll('.case-editor');
+                remainingCases.forEach((caseEl, newIndex) => {
+                    caseEl.setAttribute('data-case-index', newIndex);
+                });
+            }
+        }
+
+        function closeCaseEditor() {
+            if (window.currentCaseEditorModal) {
+                document.body.removeChild(window.currentCaseEditorModal);
+                window.currentCaseEditorModal = null;
+            }
+        }
+
+        function previewUpdatedCases() {
+            const updatedCases = collectCasesFromEditor();
+            console.log('Updated cases:', updatedCases);
+
+            // Create preview modal
+            const previewModal = document.createElement('div');
+            previewModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            previewModal.innerHTML = `
+                <div class="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+                    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">📋 Case Preview</h3>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <div class="space-y-4">
+                            ${updatedCases.map((caseItem, index) => `
+                                <div class="border border-gray-200 rounded-lg p-4">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h4 class="font-semibold text-gray-900">${escapeHtml(caseItem.caseTitle)}</h4>
+                                        ${caseItem.setting ? `<span class="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded">${caseItem.setting}</span>` : ''}
+                                    </div>
+                                    <div class="bg-blue-50 p-3 rounded mb-2">
+                                        <p class="text-blue-800 text-sm">${escapeHtml(caseItem.scenario)}</p>
+                                    </div>
+                                    <div class="mb-2">
+                                        <span class="text-sm font-medium text-gray-700">Competencies: </span>
+                                        <span class="text-sm text-gray-600">${caseItem.primaryCompetencies.join(', ')}</span>
+                                    </div>
+                                    <div class="bg-gray-50 p-2 rounded text-sm text-gray-700">
+                                        ${escapeHtml(caseItem.reasoning)}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(previewModal);
+        }
+
+        function saveUpdatedCases() {
+            const updatedCases = collectCasesFromEditor();
+
+            // Update the current result with new cases
+            if (window.currentRawLLMResult) {
+                window.currentRawLLMResult.recommendedCases = updatedCases;
+                window.currentRawLLMResult.recommendation.totalCases = updatedCases.length;
+                window.currentRawLLMResult.recommendation.needsRevision = false;
+                window.currentRawLLMResult.recommendation.revisionNotes = "Cases manually reviewed and updated by medical educator";
+            }
+
+            closeCaseEditor();
+            closeRawLLMModal();
+
+            // Show success message and option to view results
+            const successModal = document.createElement('div');
+            successModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            successModal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Cases Updated Successfully!</h3>
+                    <p class="text-gray-600 mb-4">Your customized assessment cases have been saved.</p>
+                    <div class="space-x-3">
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                                class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
+                            Close
+                        </button>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove(); showAssessmentResultsModal(window.currentRawLLMResult);" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                            View Final Results
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(successModal);
+        }
+
+        function collectCasesFromEditor() {
+            const caseElements = document.querySelectorAll('.case-editor');
+            const cases = [];
+
+            caseElements.forEach(caseEl => {
+                const title = caseEl.querySelector('.case-title').value.trim();
+                const scenario = caseEl.querySelector('.case-scenario').value.trim();
+                const setting = caseEl.querySelector('.case-setting').value;
+                const competencies = caseEl.querySelector('.case-competencies').value.split(',').map(c => c.trim()).filter(c => c);
+                const reasoning = caseEl.querySelector('.case-reasoning').value.trim();
+
+                if (title && scenario) {
+                    cases.push({
+                        caseTitle: title,
+                        scenario: scenario,
+                        setting: setting || null,
+                        primaryCompetencies: competencies,
+                        reasoning: reasoning
+                    });
+                }
+            });
+
+            return cases;
+        }
+
+        async function fixCoverage() {
+            const result = window.currentRawLLMResult;
+            if (!result || !result.recommendation || !result.recommendation.needsRevision) {
+                alert('No revision needed or data not available');
+                return;
+            }
+
+            // Get the original topic from stored data - check multiple sources
+            let originalTopic = window.currentSelectedTopic;
+
+            // If currentSelectedTopic is null, try to get from stored result data
+            if (!originalTopic && result.originalTopicData) {
+                originalTopic = result.originalTopicData;
+                console.log('Retrieved original topic from result data:', originalTopic);
+            }
+
+            // If still null, try to reconstruct from stored JSON data
+            if (!originalTopic && window.currentJsonData) {
+                // Find the topic that matches the current result
+                const matchingTopic = window.currentJsonData.topics?.find(t => t.topic === result.topic);
+                if (matchingTopic) {
+                    originalTopic = matchingTopic;
+                    console.log('Reconstructed original topic from stored data:', originalTopic);
+                }
+            }
+
+            if (!originalTopic) {
+                alert('Original topic data not available. Please restart the assessment process.');
+                return;
+            }
+
+            // Show loading modal
+            showFixCoverageLoadingModal();
+
+            try {
+                console.log('Calling fix coverage API...');
+                console.log('Original topic:', originalTopic);
+                console.log('Current cases:', result.recommendedCases);
+                console.log('Missing competencies:', result.coverageSummary.competenciesNotCovered);
+
+                const response = await fetch('/api/assessment/generate-additional-cases', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        original_topic: originalTopic,
+                        current_cases: result.recommendedCases,
+                        revision_notes: result.recommendation.revisionNotes,
+                        missing_competencies: result.coverageSummary.competenciesNotCovered
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                }
+
+                const additionalCases = await response.json();
+                console.log('Additional cases generated:', additionalCases);
+
+                closeFixCoverageLoadingModal();
+
+                // Combine the cases and update the result
+                const combinedCases = [...result.recommendedCases, ...additionalCases.new_cases];
+
+                // Update the current result
+                window.currentRawLLMResult.recommendedCases = combinedCases;
+                window.currentRawLLMResult.recommendation.totalCases = combinedCases.length;
+                window.currentRawLLMResult.recommendation.needsRevision = false;
+                window.currentRawLLMResult.recommendation.revisionNotes = "Additional cases generated by AI to address coverage gaps";
+
+                // Update coverage summary if provided
+                if (additionalCases.updated_coverage) {
+                    window.currentRawLLMResult.coverageSummary = additionalCases.updated_coverage;
+                }
+
+                // Close current editor and show success
+                closeCaseEditor();
+                showFixCoverageSuccessModal(additionalCases.new_cases.length);
+
+            } catch (error) {
+                console.error('Error fixing coverage:', error);
+                closeFixCoverageLoadingModal();
+                showFixCoverageErrorModal(error.message);
+            }
+        }
+
+        function showFixCoverageLoadingModal() {
+            const modal = document.createElement('div');
+            modal.id = 'fixCoverageLoadingModal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4 text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">🔧 Fixing Coverage Gaps</h3>
+                    <p class="text-gray-600">AI is generating additional cases to address missing competencies...</p>
+                    <p class="text-sm text-gray-500 mt-4">This may take a few moments...</p>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeFixCoverageLoadingModal() {
+            const modal = document.getElementById('fixCoverageLoadingModal');
+            if (modal) {
+                document.body.removeChild(modal);
+            }
+        }
+
+        function showFixCoverageSuccessModal(newCasesCount) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
+                    <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Coverage Fixed!</h3>
+                    <p class="text-gray-600 mb-2">Successfully generated <strong>${newCasesCount} additional case${newCasesCount > 1 ? 's' : ''}</strong> to address missing competencies.</p>
+                    <p class="text-sm text-gray-500 mb-6">All competency gaps have been filled.</p>
+                    <div class="flex justify-center space-x-3">
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                                class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
+                            Close
+                        </button>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove(); showCaseEditor();" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                            Review All Cases
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function showFixCoverageErrorModal(errorMessage) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+                    <div class="flex items-center mb-4">
+                        <svg class="w-6 h-6 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h3 class="text-lg font-semibold text-red-900">Coverage Fix Failed</h3>
+                    </div>
+                    <p class="text-red-700 mb-4">${errorMessage}</p>
+                    <p class="text-sm text-gray-600 mb-4">You can still manually add cases to address the missing competencies.</p>
+                    <div class="flex justify-end space-x-3">
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                                class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function showAssessmentResultsModal(result) {
+            // Make sure the result has the original topic data
+            if (!result.originalTopicData && window.currentSelectedTopic) {
+                result.originalTopicData = window.currentSelectedTopic;
+            }
+
+            window.currentAssessmentResult = result;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-xl font-bold text-gray-900">Assessment Cases Generated</h2>
+                        <button onclick="closeAssessmentResultsModal()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <!-- Topic Overview -->
+                        <div class="bg-blue-50 rounded-lg p-4 mb-6">
+                            <h3 class="text-lg font-semibold text-blue-900 mb-2">${result.topic}</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-2xl font-bold text-green-600">${result.coverageSummary.competenciesCovered.length}</div>
+                                    <div class="text-sm text-gray-600">Competencies Covered</div>
+                                </div>
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-2xl font-bold text-orange-600">${result.coverageSummary.competenciesNotCovered.length}</div>
+                                    <div class="text-sm text-gray-600">Not Covered</div>
+                                </div>
+                                <div class="bg-white p-3 rounded">
+                                    <div class="text-2xl font-bold text-blue-600">${result.recommendedCases.length}</div>
+                                    <div class="text-sm text-gray-600">Cases Generated</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coverage Analysis -->
+                        <div class="mb-6">
+                            <h4 class="font-semibold text-gray-800 mb-2">Coverage: ${result.coverageSummary.coveragePercentage.toFixed(1)}%</h4>
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${result.coverageSummary.coveragePercentage}%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Competency Groups -->
+                        <div class="mb-6">
+                            <h4 class="font-semibold text-gray-800 mb-3">Competency Groups</h4>
+                            <div class="space-y-3">
+                                ${result.competencyGroups.map(group => `
+                                    <div class="border border-gray-200 rounded-lg p-3">
+                                        <h5 class="font-medium text-gray-900">${group.groupName}</h5>
+                                        <p class="text-sm text-gray-600 mb-2">${group.theme}</p>
+                                        <div class="flex flex-wrap gap-1">
+                                            ${group.competencyNumbers.map(num =>
+                `<span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded">${num}</span>`
+            ).join('')}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Recommended Cases -->
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-semibold text-gray-800">Recommended Cases</h4>
+                                <button onclick="showAddCaseForm()" class="bg-stone-600 hover:bg-stone-700 text-white px-4 py-2 rounded-md text-sm">
+                                    <i class="fas fa-plus mr-2"></i>Add Custom Case
+                                </button>
+                            </div>
+                            <div id="recommendedCasesContainer" class="space-y-4">
+                                ${result.recommendedCases.map((caseItem, index) => `
+                                    <div class="border border-gray-200 rounded-lg p-4" data-case-id="${index}">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <h5 class="font-semibold text-gray-900">${caseItem.caseTitle}</h5>
+                                            <div class="flex items-center space-x-2">
+                                                ${caseItem.setting ? `<span class="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded">${caseItem.setting}</span>` : ''}
+                                                <button onclick="removeCase(${index})" class="text-red-600 hover:text-red-800 text-sm">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="bg-blue-50 p-3 rounded mb-3">
+                                            <h6 class="font-medium text-blue-900 mb-1">Clinical Scenario</h6>
+                                            <p class="text-blue-800 text-sm">${caseItem.scenario}</p>
+                                        </div>
+                                        <div class="mb-3">
+                                            <h6 class="font-medium text-gray-800 mb-1">Primary Competencies (${caseItem.primaryCompetencies.length})</h6>
+                                            <div class="flex flex-wrap gap-1">
+                                                ${caseItem.primaryCompetencies.map(comp =>
+                `<span class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded">${comp}</span>`
+            ).join('')}
+                                            </div>
+                                        </div>
+                                        <div class="bg-gray-50 p-3 rounded">
+                                            <h6 class="font-medium text-gray-800 mb-1">Educational Rationale</h6>
+                                            <p class="text-gray-700 text-sm">${caseItem.reasoning}</p>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                                
+                                <!-- Add Case Form (Initially Hidden) -->
+                                <div id="addCaseForm" class="border-2 border-dashed border-slate-300 rounded-lg p-4 hidden">
+                                    <h5 class="font-semibold text-slate-800 mb-3">Add New Case</h5>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Case Name</label>
+                                            <input type="text" id="newCaseName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-500" 
+                                                   placeholder="Enter case title...">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Case Description</label>
+                                            <textarea id="newCaseDescription" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-500" 
+                                                      placeholder="Describe the clinical scenario and educational objectives..."></textarea>
+                                        </div>
+                                        <div class="flex justify-end space-x-3">
+                                            <button onclick="hideAddCaseForm()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md text-sm">
+                                                Cancel
+                                            </button>
+                                            <button onclick="addNewCaseToList()" class="bg-stone-600 hover:bg-stone-700 text-white px-4 py-2 rounded-md text-sm">
+                                                Add Case
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Recommendation -->
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-semibold text-yellow-800">AI Recommendation</h4>
+                                ${result.recommendation.needsRevision ? `
+                                    <button onclick="fixCoverage()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                        🔧 Fix Coverage
+                                    </button>
+                                ` : ''}
+                            </div>
+                            <p class="text-yellow-700 text-sm mb-2">${result.recommendation.rationale}</p>
+                            ${result.recommendation.needsRevision ? `
+                                <div class="bg-yellow-100 border border-yellow-300 rounded p-2 mt-2">
+                                    <p class="text-yellow-800 text-sm font-medium">⚠️ Revision Recommended</p>
+                                    <p class="text-yellow-700 text-sm">${result.recommendation.revisionNotes || 'Please review the case selection.'}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <!-- Raw JSON (Collapsible) -->
+                        <div class="mt-6">
+                            <button onclick="toggleRawJSON()" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                🔍 View Raw JSON Response
+                            </button>
+                            <div id="rawJSONSection" class="hidden mt-2">
+                                <pre class="bg-gray-900 text-green-400 p-4 rounded text-xs overflow-x-auto font-mono max-h-64 overflow-y-auto">${JSON.stringify(result, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 border-t border-gray-200 flex justify-between">
+                        <button onclick="copyAssessmentJSON()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                            Copy JSON
+                        </button>
+                        <div class="space-x-3">
+                            <button onclick="closeAssessmentResultsModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
+                                Close
+                            </button>
+                            <button onclick="approveAssessment()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md">
+                                Approve & Generate Master Cases
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeAssessmentResultsModal() {
+            const modals = document.querySelectorAll('.fixed.inset-0.bg-black.bg-opacity-50');
+            modals.forEach(modal => {
+                if (modal.innerHTML.includes('Assessment Cases Generated')) {
+                    document.body.removeChild(modal);
+                }
+            });
+            window.currentAssessmentResult = null;
+        }
+
+        function toggleRawJSON() {
+            const section = document.getElementById('rawJSONSection');
+            section.classList.toggle('hidden');
+        }
+
+        function copyAssessmentJSON() {
+            if (window.currentAssessmentResult) {
+                navigator.clipboard.writeText(JSON.stringify(window.currentAssessmentResult, null, 2))
+                    .then(() => alert('Assessment JSON copied to clipboard!'))
+                    .catch(() => alert('Failed to copy to clipboard'));
+            }
+        }
+
+        function approveAssessment() {
+            const result = window.currentAssessmentResult;
+            if (result) {
+                closeAssessmentResultsModal();
+                alert(`Assessment approved! ${result.recommendedCases.length} cases ready for master case generation.\n\nNext: Integrate with your master case generation system.`);
+                // Here you would integrate with your master case generation system
+                console.log('Approved assessment result:', result);
+            }
+        }
+
+        function showAddCaseForm() {
+            console.log('showAddCaseForm called');
+            const form = document.getElementById('addCaseForm');
+            console.log('Form element:', form);
+            if (form) {
+                form.classList.remove('hidden');
+                const nameInput = document.getElementById('newCaseName');
+                if (nameInput) {
+                    nameInput.focus();
+                } else {
+                    console.error('newCaseName input not found');
+                }
+            } else {
+                console.error('addCaseForm not found in DOM');
+            }
+        }
+
+        function hideAddCaseForm() {
+            const form = document.getElementById('addCaseForm');
+            if (form) {
+                form.classList.add('hidden');
+                // Clear the form
+                document.getElementById('newCaseName').value = '';
+                document.getElementById('newCaseDescription').value = '';
+            }
+        }
+
+        function addNewCaseToList() {
+            console.log('addNewCaseToList called');
+            const caseName = document.getElementById('newCaseName').value.trim();
+            const caseDescription = document.getElementById('newCaseDescription').value.trim();
+            console.log('Case name:', caseName);
+            console.log('Case description:', caseDescription);
+
+            if (!caseName || !caseDescription) {
+                alert('Please fill in both case name and description');
+                return;
+            }
+
+            // Create new case object
+            const newCase = {
+                caseTitle: caseName,
+                scenario: caseDescription,
+                primaryCompetencies: [], // Will be filled manually or derived later
+                reasoning: "Custom case added by medical educator",
+                setting: "Ward" // Default setting
+            };
+
+            // Add to current result
+            if (window.currentAssessmentResult) {
+                window.currentAssessmentResult.recommendedCases.push(newCase);
+                window.currentAssessmentResult.recommendation.totalCases = window.currentAssessmentResult.recommendedCases.length;
+            }
+
+            // Add to the display
+            const container = document.getElementById('recommendedCasesContainer');
+            console.log('Container:', container);
+            if (!container) {
+                console.error('recommendedCasesContainer not found');
+                alert('Error: Cannot find the cases container. Please refresh and try again.');
+                return;
+            }
+            const caseIndex = container.querySelectorAll('[data-case-id]').length;
+            console.log('Case index:', caseIndex);
+
+            const newCaseHtml = `
+                <div class="border border-gray-200 rounded-lg p-4" data-case-id="${caseIndex}">
+                    <div class="flex justify-between items-start mb-3">
+                        <h5 class="font-semibold text-gray-900">${escapeHtml ? escapeHtml(caseName) : caseName}</h5>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded">Custom</span>
+                            <button onclick="removeCaseFromList(${caseIndex})" class="text-red-600 hover:text-red-800 text-sm">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-blue-50 p-3 rounded mb-3">
+                        <h6 class="font-medium text-blue-900 mb-1">Clinical Scenario</h6>
+                        <p class="text-blue-800 text-sm">${escapeHtml ? escapeHtml(caseDescription) : caseDescription}</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="font-medium text-gray-800 mb-1">Primary Competencies (0)</h6>
+                        <div class="flex flex-wrap gap-1">
+                            <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">To be assigned</span>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <h6 class="font-medium text-gray-800 mb-1">Educational Rationale</h6>
+                        <p class="text-gray-700 text-sm">Custom case added by medical educator</p>
+                    </div>
+                </div>
+            `;
+
+            // Insert before the add case form
+            const addForm = document.getElementById('addCaseForm');
+            console.log('Add form element:', addForm);
+            if (!addForm) {
+                console.error('addCaseForm not found for insertion');
+                // Fallback: append to container
+                container.insertAdjacentHTML('beforeend', newCaseHtml);
+            } else {
+                addForm.insertAdjacentHTML('beforebegin', newCaseHtml);
+            }
+
+            // Hide and clear the form
+            hideAddCaseForm();
+
+            // Show success message
+            const successAlert = document.createElement('div');
+            successAlert.className = 'bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4';
+            successAlert.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span class="text-blue-800 text-sm font-medium">Case "${caseName}" added successfully!</span>
+                </div>
+            `;
+
+            container.parentNode.insertBefore(successAlert, container);
+
+            // Remove success message after 3 seconds
+            setTimeout(() => {
+                if (successAlert.parentNode) {
+                    successAlert.parentNode.removeChild(successAlert);
+                }
+            }, 3000);
+        }
+
+        function debugAddCase() {
+            console.log('=== DEBUG ADD CASE ===');
+            console.log('currentAssessmentResult:', window.currentAssessmentResult);
+            console.log('addCaseForm exists:', !!document.getElementById('addCaseForm'));
+            console.log('recommendedCasesContainer exists:', !!document.getElementById('recommendedCasesContainer'));
+            console.log('newCaseName exists:', !!document.getElementById('newCaseName'));
+            console.log('newCaseDescription exists:', !!document.getElementById('newCaseDescription'));
+
+            const form = document.getElementById('addCaseForm');
+            if (form) {
+                console.log('Form classes:', form.className);
+                console.log('Form hidden:', form.classList.contains('hidden'));
+            }
+
+            alert('Check console for debug info');
+        }
+
+        function removeCaseFromList(index) {
+            if (confirm('Are you sure you want to remove this case?')) {
+                const caseElement = document.querySelector(`[data-case-id="${index}"]`);
+                if (caseElement) {
+                    caseElement.remove();
+
+                    // Update the data
+                    if (window.currentAssessmentResult && window.currentAssessmentResult.recommendedCases[index]) {
+                        window.currentAssessmentResult.recommendedCases.splice(index, 1);
+                        window.currentAssessmentResult.recommendation.totalCases = window.currentAssessmentResult.recommendedCases.length;
+                    }
+
+                    // Update indices for remaining cases
+                    const remainingCases = document.querySelectorAll('[data-case-id]');
+                    remainingCases.forEach((caseEl, newIndex) => {
+                        caseEl.setAttribute('data-case-id', newIndex);
+                        const removeBtn = caseEl.querySelector('button[onclick*="removeCaseFromList"]');
+                        if (removeBtn) {
+                            removeBtn.setAttribute('onclick', `removeCaseFromList(${newIndex})`);
+                        }
+                    });
+                }
+            }
+        }
+
+        function showFullscreenPage(topicId, topicName) {
+            const fullscreenModal = document.createElement('div');
+            fullscreenModal.className = 'fixed inset-0 bg-white z-50 transition-transform duration-300 transform';
+            fullscreenModal.innerHTML = `
+                <div class="h-full flex flex-col">
+                    <!-- Header -->
+                    <header class="bg-white shadow-sm border-b">
+                        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold text-slate-900">Create Assessment</h1>
+                                <p class="text-sm text-slate-600">Topic: ${escapeHtml(topicName)}</p>
+                            </div>
+                            <button onclick="closeFullscreenModal()" class="text-slate-600 hover:text-slate-900">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <!-- Main Content -->
+                    <main class="flex-1 overflow-auto bg-slate-50 p-6">
+                        <div class="max-w-7xl mx-auto">
+                            <!-- Blank content area -->
+                            <div class="bg-white rounded-lg shadow-sm p-6">
+                                <!-- Content will go here -->
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+
+            document.body.appendChild(fullscreenModal);
+            window.currentModal = fullscreenModal;
+
+            // Trigger enter animation
+            requestAnimationFrame(() => {
+                fullscreenModal.classList.add('translate-y-0');
+                fullscreenModal.classList.remove('translate-y-full');
+            });
+        }
+
+        function closeFullscreenModal() {
+            const modal = window.currentModal;
+            if (modal) {
+                // Trigger exit animation
+                modal.classList.add('translate-y-full');
+                modal.classList.remove('translate-y-0');
+
+                // Remove modal after animation
+                setTimeout(() => {
+                    document.body.removeChild(modal);
+                    window.currentModal = null;
+                }, 300);
+            }
+        }
+
+        function closeModal() {
+            if (window.currentModal) {
+                document.body.removeChild(window.currentModal);
+                window.currentModal = null;
+            }
+        }
+
+        // Placeholder functions for other actions
+        function generateMCQs(topicId, topicName) {
+            closeModal();
+            alert(`Generating MCQs for topic: ${topicName}`);
+        }
+
+        function generateFlashcards(topicId, topicName) {
+            closeModal();
+            alert(`Generating flashcards for topic: ${topicName}`);
+        }
+
+        function createCase(compId, competency) {
+            // Implement case creation functionality
+            alert(`Creating case for competency: ${competency}`);
+        }
+
+        function editCompetency(compId) {
+            alert(`Edit competency: ${compId}`);
+            // Implement edit functionality
+        }
+
+        function duplicateCompetency(compId) {
+            alert(`Duplicating competency: ${compId}`);
+            // Implement duplicate functionality
+        }
+
+        function exportAllTopics() {
+            alert('Exporting all topics...');
+            // Implement export functionality
+        }
+
+        // Topic References Management
+        async function loadTopicReferences(topicId) {
+            try {
+                const response = await fetch(`/api/tables/topics/${topicId}/references/`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const references = result.references || [];
+                    updateReferencesCount(topicId, references.length);
+                    displayReferences(topicId, references);
+                }
+            } catch (error) {
+                console.error('Error loading references:', error);
+            }
+        }
+
+        function updateReferencesCount(topicId, count) {
+            const countElement = document.getElementById(`refCount-${topicId}`);
+            if (countElement) {
+                countElement.textContent = `${count} reference${count !== 1 ? 's' : ''}`;
+            }
+        }
+
+        function toggleReferences(topicId, topicName) {
+            const referencesSection = document.getElementById(`references-${topicId}`);
+            if (referencesSection.classList.contains('hidden')) {
+                referencesSection.classList.remove('hidden');
+                loadTopicReferences(topicId); // Refresh when opening
+            } else {
+                referencesSection.classList.add('hidden');
+            }
+        }
+
+        function displayReferences(topicId, references) {
+            const referencesList = document.getElementById(`referencesList-${topicId}`);
+
+            if (references.length === 0) {
+                referencesList.innerHTML = `
+                    <div class="text-slate-500 text-sm italic py-2">
+                        No reference documents attached to this topic.
+                    </div>
+                `;
+                return;
+            }
+
+            referencesList.innerHTML = references.map(ref => `
+                <div class="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-file-alt text-slate-400"></i>
+                        <div>
+                            <div class="font-medium text-slate-800 text-sm">${escapeHtml(ref.filename)}</div>
+                            ${ref.description ? `<div class="text-slate-600 text-xs">${escapeHtml(ref.description)}</div>` : ''}
+                            <div class="text-slate-500 text-xs">
+                                ${formatFileSize(ref.size)} • ${ref.uploaded_at}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="downloadReference('${topicId}', '${ref.id}')" 
+                                class="bg-blue-100 hover:bg-blue-200 text-blue-600 px-2 py-1 rounded text-xs">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button onclick="deleteReference('${topicId}', '${ref.id}', '${escapeHtml(ref.filename)}')" 
+                                class="bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded text-xs">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showAddReferenceModal(topicId, topicName) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+                    <h3 class="text-lg font-semibold mb-2">Add Reference Documents</h3>
+                    <p class="text-slate-600 mb-4">Attach reference documents to: <strong>${escapeHtml(topicName)}</strong></p>
+                    
+                    <form id="addReferenceForm" enctype="multipart/form-data">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Select Files</label>
+                            <input type="file" id="referenceFiles" name="files" multiple required 
+                                   class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            <p class="text-xs text-slate-500 mt-1">You can select multiple files at once</p>
+                        </div>
+                        
+                        <!-- File Preview Area -->
+                        <div id="filePreview" class="mb-4 hidden">
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Selected Files:</label>
+                            <div id="fileList" class="space-y-2 max-h-48 overflow-y-auto border border-slate-200 rounded-md p-3 bg-slate-50">
+                                <!-- Selected files will appear here -->
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Description (Optional)</label>
+                            <textarea id="referenceDescription" name="description" rows="2" 
+                                      class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      placeholder="Brief description for these reference documents"></textarea>
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="closeReferenceModal()" 
+                                    class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md text-sm">
+                                Cancel
+                            </button>
+                            <button type="submit" id="uploadBtn"
+                                    class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm">
+                                Upload References
+                            </button>
+                        </div>
+                        
+                        <!-- Upload Progress -->
+                        <div id="uploadProgress" class="hidden mt-4">
+                            <div class="bg-slate-200 rounded-full h-2">
+                                <div id="progressBar" class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <p id="progressText" class="text-sm text-slate-600 mt-1">Uploading...</p>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            window.currentReferenceModal = modal;
+
+            // Handle file selection preview
+            document.getElementById('referenceFiles').addEventListener('change', handleFileSelection);
+
+            // Handle form submission
+            document.getElementById('addReferenceForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                uploadReference(topicId);
+            });
+        }
+
+        function handleFileSelection() {
+            const fileInput = document.getElementById('referenceFiles');
+            const filePreview = document.getElementById('filePreview');
+            const fileList = document.getElementById('fileList');
+            const uploadBtn = document.getElementById('uploadBtn');
+
+            const files = Array.from(fileInput.files);
+
+            if (files.length === 0) {
+                filePreview.classList.add('hidden');
+                uploadBtn.textContent = 'Upload References';
+                return;
+            }
+
+            // Show preview section
+            filePreview.classList.remove('hidden');
+            uploadBtn.textContent = `Upload ${files.length} Reference${files.length !== 1 ? 's' : ''}`;
+
+            // Display file list
+            fileList.innerHTML = files.map((file, index) => `
+                <div class="flex items-center justify-between bg-white border border-slate-200 rounded-md p-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-file-alt text-slate-400 text-sm"></i>
+                        <div>
+                            <div class="text-sm font-medium text-slate-800">${escapeHtml(file.name)}</div>
+                            <div class="text-xs text-slate-500">${formatFileSize(file.size)} • ${file.type || 'Unknown type'}</div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="removeFile(${index})" 
+                            class="text-red-500 hover:text-red-700 text-sm">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function removeFile(index) {
+            const fileInput = document.getElementById('referenceFiles');
+            const files = Array.from(fileInput.files);
+
+            // Create a new FileList without the removed file
+            const dt = new DataTransfer();
+            files.forEach((file, i) => {
+                if (i !== index) {
+                    dt.items.add(file);
+                }
+            });
+
+            fileInput.files = dt.files;
+            handleFileSelection(); // Refresh the preview
+        }
+
+        async function uploadReference(topicId) {
+            try {
+                const formData = new FormData();
+                const fileInput = document.getElementById('referenceFiles');
+                const descriptionInput = document.getElementById('referenceDescription');
+                const uploadBtn = document.getElementById('uploadBtn');
+                const progressSection = document.getElementById('uploadProgress');
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+
+                if (!fileInput.files.length) {
+                    alert('Please select at least one file');
+                    return;
+                }
+
+                // Show progress
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Uploading...';
+                progressSection.classList.remove('hidden');
+
+                // Add all files to form data
+                Array.from(fileInput.files).forEach(file => {
+                    formData.append('files', file);
+                });
+                formData.append('description', descriptionInput.value);
+
+                // Upload with progress tracking
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressBar.style.width = percentComplete + '%';
+                        progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    const result = JSON.parse(xhr.responseText);
+
+                    if (xhr.status === 200 && result.success) {
+                        closeReferenceModal();
+                        loadTopicReferences(topicId); // Refresh the references list
+                        alert(`${result.count} reference document(s) uploaded successfully!`);
+                    } else {
+                        alert(`Error: ${result.message}`);
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = `Upload ${fileInput.files.length} Reference${fileInput.files.length !== 1 ? 's' : ''}`;
+                        progressSection.classList.add('hidden');
+                    }
+                });
+
+                xhr.addEventListener('error', () => {
+                    alert('Error uploading reference documents');
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = `Upload ${fileInput.files.length} Reference${fileInput.files.length !== 1 ? 's' : ''}`;
+                    progressSection.classList.add('hidden');
+                });
+
+                xhr.open('POST', `/api/tables/topics/${topicId}/references/`);
+                xhr.send(formData);
+
+            } catch (error) {
+                console.error('Error uploading reference:', error);
+                alert('Error uploading reference documents');
+            }
+        }
+
+        function closeReferenceModal() {
+            if (window.currentReferenceModal) {
+                document.body.removeChild(window.currentReferenceModal);
+                window.currentReferenceModal = null;
+            }
+        }
+
+        async function downloadReference(topicId, referenceId) {
+            try {
+                const response = await fetch(`/api/tables/topics/${topicId}/references/${referenceId}/download/`);
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'download';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert('Error downloading file');
+                }
+            } catch (error) {
+                console.error('Error downloading reference:', error);
+                alert('Error downloading file');
+            }
+        }
+
+        async function deleteReference(topicId, referenceId, filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/tables/topics/${topicId}/references/${referenceId}/`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    loadTopicReferences(topicId); // Refresh the references list
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+
+            } catch (error) {
+                console.error('Error deleting reference:', error);
+                alert('Error deleting reference document');
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Store the current JSON data globally for case generation
+        let currentJsonData = null;
+
+        // Override the original displayResults function to store data
+        const originalDisplayResults = displayResults;
+        function displayResults(data) {
+            currentJsonData = data;
+            window.currentJsonData = data;
+            return originalDisplayResults(data);
+        }
+
+        // Listen for case generation events
+        document.addEventListener('assessmentCasesApproved', (event) => {
+            const { topic, cases, analysis } = event.detail;
+            console.log('Cases approved for topic:', topic.topic);
+            console.log('Approved cases:', cases);
+            alert(`${cases.length} cases approved for ${topic.topic}! Proceeding to case generation...`);
+            // Here you can integrate with your master case generation system
+        });
+
+        document.addEventListener('assessmentCasesRejected', (event) => {
+            const { topic, analysis, reason } = event.detail;
+            console.log('Cases rejected for topic:', topic.topic, 'Reason:', reason);
+            // Handle rejection - maybe log for improvement
+        });
     </script>
+
+    <!-- Include Case Generation Integration -->
+    <script src="case-generation-integration.js"></script>
 </body>
 
 </html>
