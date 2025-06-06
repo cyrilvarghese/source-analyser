@@ -25,13 +25,13 @@ class FileCropperApp {
         const path = window.location.pathname;
         const filename = path.split('/').pop();
 
-        if (filename.includes('upload-form')) return 'upload-form';
+        if (filename.includes('case-creator')) return 'case-creator';
         if (filename.includes('table-processor')) return 'table-processor';
         if (filename.includes('extractions-viewer')) return 'extractions-viewer';
         if (filename.includes('index')) return 'index';
 
         // Fallback to detecting by page content
-        if (document.querySelector('#upload-form-container')) return 'upload-form';
+        if (document.querySelector('#case-creator-container')) return 'case-creator';
         if (document.querySelector('#table-processor-container')) return 'table-processor';
         if (document.querySelector('#extractions-container')) return 'extractions-viewer';
         if (document.querySelector('#chapter-manager-container')) return 'chapter-manager';
@@ -75,7 +75,7 @@ class FileCropperApp {
      */
     async initializePageComponents() {
         switch (this.currentPage) {
-            case 'upload-form':
+            case 'case-creator':
                 await this.initUploadFormPage();
                 break;
 
@@ -283,7 +283,7 @@ class FileCropperApp {
      */
     navigateToPage(page) {
         const pageUrls = {
-            'upload': 'upload-form.html',
+            'upload': 'case-creator.html',
             'processor': 'table-processor.html',
             'viewer': 'extractions-viewer.html',
             'index': 'index.html'

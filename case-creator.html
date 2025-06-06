@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Upload - Table Extractor & Tree Viewer</title>
+    <title>Case Creator</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,9 +13,8 @@
     <div class="max-w-7xl mx-auto px-4">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-slate-700 mb-2">Table Extractor & Tree Viewer</h1>
-            <p class="text-slate-600">Upload an image or PDF containing tables to extract data and view as interactive
-                tree</p>
+            <h1 class="text-3xl font-bold text-slate-700 mb-2"> Case Creator</h1>
+            <p class="text-slate-600">Create cases from reference documents mapped to competencies</p>
         </div>
 
         <!-- Upload Form -->
@@ -23,10 +22,10 @@
             <!-- Cached Files Section -->
             <div class="mb-8 border-b border-slate-200 pb-6">
                 <h3 class="text-lg font-medium text-slate-700 mb-4">
-                    <i class="fas fa-history mr-2"></i>Recently Processed Files
+                    <i class="fas fa-history mr-2"></i>Recent Documents & Assessments
                 </h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cachedFilesList">
-                    <!-- Cached files will be loaded here -->
+                    <!-- Cached files and assessments will be loaded here -->
                 </div>
             </div>
 
@@ -111,13 +110,27 @@
                 `;
 
                 // Fetch cached files from backend
-                const response = await fetch('/api/tables/cached-files/');
+                const [tablesResponse, assessmentsResponse] = await Promise.all([
+                    fetch('/api/tables/cached-files/'),
+                    fetch('/api/tables/assessment/cached-results/')
+                ]);
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                const cachedFiles = [];
+
+                // Add table extraction results
+                if (tablesResponse.ok) {
+                    const tableFiles = await tablesResponse.json();
+                    cachedFiles.push(...tableFiles.map(file => ({ ...file, type: 'table' })));
                 }
 
-                const cachedFiles = await response.json();
+                // Add assessment results
+                if (assessmentsResponse.ok) {
+                    const assessmentFiles = await assessmentsResponse.json();
+                    cachedFiles.push(...assessmentFiles.map(file => ({ ...file, type: 'assessment' })));
+                }
+
+                // Sort by creation date (newest first)
+                cachedFiles.sort((a, b) => new Date(b.processedDate || b.createdAt) - new Date(a.processedDate || a.createdAt));
 
                 if (!cachedFiles || cachedFiles.length === 0) {
                     cachedFilesList.innerHTML = `
@@ -129,30 +142,51 @@
                     return;
                 }
 
-                cachedFilesList.innerHTML = cachedFiles.map(file => `
-                    <div class="border border-slate-200 rounded-lg p-4 hover:border-stone-400 hover:shadow-md transition-all cursor-pointer" onclick="loadCachedFile('${file.id}')">
-                        <div class="flex items-start justify-between mb-2">
-                            <div class="flex-1">
-                                <h4 class="font-medium text-slate-900 text-sm truncate">${file.filename}</h4>
-                                <p class="text-xs text-slate-500 mt-1">${file.department || 'Unknown Department'}</p>
+                cachedFilesList.innerHTML = cachedFiles.map(file => {
+                    const isAssessment = file.type === 'assessment';
+                    const clickHandler = isAssessment ? `loadCachedAssessment('${file.id}')` : `loadCachedFile('${file.id}')`;
+
+                    return `
+                        <div class="border border-slate-200 rounded-lg p-4 hover:border-stone-400 hover:shadow-md transition-all cursor-pointer" onclick="${clickHandler}">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-1">
+                                        <h4 class="font-medium text-slate-900 text-sm truncate">${isAssessment ? file.topic : file.filename}</h4>
+                                        <span class="text-xs px-2 py-1 rounded-full ${isAssessment ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}">
+                                            ${isAssessment ? 'Assessment' : 'Document'}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-1">${isAssessment ? 'AI-Generated Cases' : (file.department || 'Unknown Department')}</p>
+                                </div>
+                                <i class="fas ${isAssessment ? 'fa-brain' : 'fa-file-alt'} text-stone-500"></i>
                             </div>
-                            <i class="fas fa-file-alt text-stone-500"></i>
+                            <div class="space-y-1">
+                                ${isAssessment ? `
+                                    <div class="flex justify-between text-xs text-slate-600">
+                                        <span>Cases:</span>
+                                        <span class="font-medium">${file.casesCount || 0}</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs text-slate-600">
+                                        <span>Coverage:</span>
+                                        <span class="font-medium">${file.coveragePercentage ? file.coveragePercentage.toFixed(1) + '%' : '0%'}</span>
+                                    </div>
+                                ` : `
+                                    <div class="flex justify-between text-xs text-slate-600">
+                                        <span>Topics:</span>
+                                        <span class="font-medium">${file.topicsCount || 0}</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs text-slate-600">
+                                        <span>Competencies:</span>
+                                        <span class="font-medium">${file.competenciesCount || 0}</span>
+                                    </div>
+                                `}
+                                <div class="text-xs text-slate-500 mt-2">
+                                    <i class="fas fa-clock mr-1"></i>${formatDate(file.processedDate || file.createdAt)}
+                                </div>
+                            </div>
                         </div>
-                        <div class="space-y-1">
-                            <div class="flex justify-between text-xs text-slate-600">
-                                <span>Topics:</span>
-                                <span class="font-medium">${file.topicsCount || 0}</span>
-                            </div>
-                            <div class="flex justify-between text-xs text-slate-600">
-                                <span>Competencies:</span>
-                                <span class="font-medium">${file.competenciesCount || 0}</span>
-                            </div>
-                            <div class="text-xs text-slate-500 mt-2">
-                                <i class="fas fa-clock mr-1"></i>${formatDate(file.processedDate)}
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
 
             } catch (error) {
                 console.error('Error loading cached files:', error);
@@ -795,6 +829,9 @@
                 const result = await response.json();
                 console.log('Assessment API response:', result);
 
+                // Cache the assessment result
+                await cacheAssessmentResult(result, topic);
+
                 // Close loading modal
                 closeAssessmentLoadingModal();
 
@@ -1025,7 +1062,8 @@
             const result = window.currentRawLLMResult;
             if (result) {
                 closeRawLLMModal();
-                showAssessmentResultsModal(result);
+                // showAssessmentResultsModal(result);
+                showCaseEditor();
             }
         }
 
@@ -2285,6 +2323,69 @@
             currentJsonData = data;
             window.currentJsonData = data;
             return originalDisplayResults(data);
+        }
+
+        // Cache assessment results
+        async function cacheAssessmentResult(result, originalTopic) {
+            try {
+                const cacheData = {
+                    id: `assessment_${Date.now()}`,
+                    type: 'assessment',
+                    topic: result.topic || originalTopic.topic,
+                    originalTopic: originalTopic,
+                    assessmentResult: result,
+                    createdAt: new Date().toISOString(),
+                    casesCount: result.recommendedCases ? result.recommendedCases.length : 0,
+                    competenciesCount: result.totalCompetencies || 0,
+                    coveragePercentage: result.coverageSummary ? result.coverageSummary.coveragePercentage : 0
+                };
+
+                // Send to backend for caching
+                const response = await fetch('/api/tables/assessment/cache-result/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(cacheData)
+                });
+
+                if (response.ok) {
+                    console.log('Assessment result cached successfully');
+                    // Refresh cached files list to include new assessment
+                    setTimeout(() => loadCachedFiles(), 500);
+                } else {
+                    console.warn('Failed to cache assessment result');
+                }
+            } catch (error) {
+                console.error('Error caching assessment result:', error);
+            }
+        }
+
+        // Load cached assessment result
+        async function loadCachedAssessment(cacheId) {
+            try {
+                const response = await fetch(`/api/tables/assessment/cached-result/${cacheId}/`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const cachedData = await response.json();
+
+                // Restore the cached assessment data
+                window.currentRawLLMResult = cachedData.assessmentResult;
+                window.currentSelectedTopic = cachedData.originalTopic;
+
+                // Store original topic data in the result for future reference
+                window.currentRawLLMResult.originalTopicData = cachedData.originalTopic;
+
+                // Show the case editor directly
+                showCaseEditor();
+
+            } catch (error) {
+                console.error('Error loading cached assessment:', error);
+                alert(`Failed to load cached assessment: ${error.message}`);
+            }
         }
 
         // Listen for case generation events

@@ -16,6 +16,10 @@ router = APIRouter(prefix="/api/tables", tags=["tables"])
 TABLE_CACHE_DIR = Path("cache/table-extractions")
 TABLE_CACHE_MAP = TABLE_CACHE_DIR / "cache_map.json"
 
+# Assessment cache utilities
+ASSESSMENT_CACHE_DIR = Path("cache/assessments")
+ASSESSMENT_CACHE_MAP = ASSESSMENT_CACHE_DIR / "assessment_cache_map.json"
+
 # Topic references directory
 TOPIC_REFERENCES_DIR = Path("cache/topic-references")
 TOPIC_REFERENCES_MAP = TOPIC_REFERENCES_DIR / "references_map.json"
@@ -42,6 +46,80 @@ def save_topic_references_map(references_map):
             json.dump(references_map, f, indent=2)
     except IOError as e:
         print(f"Error saving topic references map: {e}")
+
+def ensure_assessment_cache_dir():
+    """Ensure assessment cache directory exists"""
+    ASSESSMENT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_assessment_cache_map():
+    """Load the assessment cache mapping"""
+    if not ASSESSMENT_CACHE_MAP.exists():
+        return {}
+    try:
+        with open(ASSESSMENT_CACHE_MAP, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+def save_assessment_cache_map(cache_map):
+    """Save the assessment cache mapping"""
+    ensure_assessment_cache_dir()
+    try:
+        with open(ASSESSMENT_CACHE_MAP, 'w') as f:
+            json.dump(cache_map, f, indent=2)
+    except IOError as e:
+        print(f"Error saving assessment cache map: {e}")
+
+def save_assessment_cache(cache_data):
+    """Save assessment result to cache"""
+    ensure_assessment_cache_dir()
+    
+    # Generate file path
+    cache_id = cache_data['id']
+    json_filename = f"{cache_id}.json"
+    json_path = ASSESSMENT_CACHE_DIR / json_filename
+    
+    try:
+        # Save JSON file
+        with open(json_path, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+        
+        # Update cache map
+        cache_map = load_assessment_cache_map()
+        cache_map[cache_id] = {
+            'type': 'assessment',
+            'json_file': str(json_path),
+            'topic': cache_data.get('topic', 'Unknown Topic'),
+            'created_at': cache_data.get('createdAt', ''),
+            'cases_count': cache_data.get('casesCount', 0),
+            'competencies_count': cache_data.get('competenciesCount', 0),
+            'coverage_percentage': cache_data.get('coveragePercentage', 0)
+        }
+        save_assessment_cache_map(cache_map)
+        
+        return str(json_path)
+    except IOError as e:
+        print(f"Error saving assessment to cache: {e}")
+        return None
+
+def get_assessment_cache(cache_id):
+    """Get cached assessment result"""
+    cache_map = load_assessment_cache_map()
+    if cache_id not in cache_map:
+        return None
+    
+    cache_entry = cache_map[cache_id]
+    json_file = cache_entry.get('json_file')
+    
+    if not json_file or not os.path.exists(json_file):
+        return None
+    
+    try:
+        with open(json_file, 'r') as f:
+            return json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        print(f"Error loading cached assessment: {e}")
+        return None
 
 def ensure_table_cache_dir():
     """Ensure table cache directory exists"""
@@ -129,6 +207,7 @@ def save_table_cache(filename, json_data, markdown_content):
         # Update cache map
         cache_map = load_table_cache_map()
         cache_map[filename] = {
+            'type': 'table',
             'json_file': str(json_path),
             'markdown_file': str(markdown_path),
             'cached_at': time.strftime('%Y-%m-%d %H:%M:%S')
@@ -1077,6 +1156,109 @@ async def delete_topic_reference(topic_id: str, reference_id: str):
             status_code=500,
             content={
                 "success": False,
-                "message": f"Error deleting reference: {str(e)}"
+                                    "message": f"Error deleting reference: {str(e)}"
+                }
+            )
+
+# Assessment caching endpoints
+@router.post("/assessment/cache-result/")
+async def cache_assessment_result(cache_data: dict):
+    """Cache an assessment result for future retrieval."""
+    try:
+        # Validate required fields
+        if 'id' not in cache_data:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Missing required field: id"
+                }
+            )
+        
+        # Save to cache
+        cache_path = save_assessment_cache(cache_data)
+        if cache_path:
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Assessment result cached successfully",
+                "cache_id": cache_data['id'],
+                "cache_path": cache_path
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": "Failed to save assessment to cache"
+                }
+            )
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error caching assessment result: {str(e)}"
+            }
+        )
+
+@router.get("/assessment/cached-results/")
+async def list_cached_assessments():
+    """List all cached assessment results."""
+    try:
+        cache_map = load_assessment_cache_map()
+        cached_assessments = []
+        
+        for cache_id, cache_entry in cache_map.items():
+            try:
+                # Verify file exists
+                json_file = cache_entry.get('json_file')
+                if json_file and os.path.exists(json_file):
+                    cached_assessments.append({
+                        "id": cache_id,
+                        "type": cache_entry.get('type', 'assessment'),
+                        "topic": cache_entry.get('topic', 'Unknown Topic'),
+                        "createdAt": cache_entry.get('created_at', ''),
+                        "casesCount": cache_entry.get('cases_count', 0),
+                        "competenciesCount": cache_entry.get('competencies_count', 0),
+                        "coveragePercentage": cache_entry.get('coverage_percentage', 0)
+                    })
+            except Exception as e:
+                print(f"Error processing cache entry for {cache_id}: {e}")
+                continue
+        
+        return JSONResponse(content=cached_assessments)
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error listing cached assessments: {str(e)}"
+            }
+        )
+
+@router.get("/assessment/cached-result/{cache_id}/")
+async def get_cached_assessment(cache_id: str):
+    """Get a specific cached assessment result."""
+    try:
+        cached_data = get_assessment_cache(cache_id)
+        if not cached_data:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": f"Cached assessment with ID {cache_id} not found"
+                }
+            )
+        
+        return JSONResponse(content=cached_data)
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Error loading cached assessment: {str(e)}"
             }
         ) 

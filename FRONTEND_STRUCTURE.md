@@ -22,7 +22,7 @@ assets/
 
 templates/                    # Refactored HTML templates
 ├── index.html               # Main dashboard with chapter manager
-├── upload-form.html         # File upload and table extraction
+├── case-creator.html         # File upload and table extraction
 ├── table-processor.html     # Dedicated table processing page
 └── extractions-viewer.html  # Browse extracted data (uses existing code)
 ```
@@ -96,7 +96,7 @@ Application coordinator that initializes and manages all components.
 
 **Page Detection:**
 - Automatically detects current page and initializes appropriate components
-- Supports upload-form, table-processor, extractions-viewer, and index pages
+- Supports case-creator, table-processor, extractions-viewer, and index pages
 
 ## Components
 
@@ -184,7 +184,7 @@ All HTML files have been refactored to use the new modular structure:
    - General file upload area
    - Feature overview cards
 
-2. **templates/upload-form.html**
+2. **templates/case-creator.html**
    - File upload component
    - Table extraction component
    - Simplified structure using components
@@ -261,7 +261,7 @@ Comprehensive CSS framework with:
 
 The refactored frontend maintains all existing functionality:
 
-- **Upload files**: Use upload-form.html or index.html
+- **Upload files**: Use case-creator.html or index.html
 - **Process tables**: Use table-processor.html
 - **Manage chapters**: Available on index.html
 - **View extractions**: Use extractions-viewer.html (unchanged)
