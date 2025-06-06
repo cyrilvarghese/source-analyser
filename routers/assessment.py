@@ -5,9 +5,13 @@ Assessment router for case generation and assessment management
 import os
 import json
 from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+
+# Import services
+from services.master_case_generator import MasterCaseRequest, MasterCaseResponse, generate_master_case
+from services.case_management import case_manager
 
 router = APIRouter(prefix="/api/assessment", tags=["assessment"])
 
@@ -66,6 +70,8 @@ class AdditionalCasesResponse(BaseModel):
     new_cases: List[RecommendedCase]
     updated_coverage: Optional[CoverageSummary] = None
     rationale: str
+
+# Models imported from services
 
 # Case generation prompt
 CASE_GENERATION_PROMPT = """# Medical Case Generation Planning
@@ -185,6 +191,264 @@ Missing Competencies: {missing_competencies}
 Revision Notes: {revision_notes}
 
 OUTPUT (JSON only):"""
+
+# Master Case Generator prompt (adapted from v4)
+MASTER_CASE_GENERATOR_PROMPT = """# 🧠 Master Case Generator v4.0 
+
+You are an expert AI Medical Education Content Creator. Your function is to generate highly structured, clinically accurate, and engaging medical case documents for teaching purposes based on provided clinical references and case specifications.
+
+**Core Objective:** Create a comprehensive case document with all 13 parts that serves as a rich grounding text for medical education. The case must be meticulously based on provided clinical references and current medical guidelines.
+
+**CRITICAL INSTRUCTION:** You MUST generate all 13 parts in the exact formatting structure provided below.
+
+---
+
+## Input Data:
+**Case Title:** {case_title}
+**Clinical Scenario:** {scenario}
+**Primary Competencies:** {competencies}
+**Educational Reasoning:** {reasoning}
+**Setting:** {setting}
+**Abstract Variables:** {abstract_variables}
+**Emotional Layer:** {emotional_layer}
+**Mystery Hook:** {mystery_hook}
+
+**Clinical References:**
+{references}
+
+---
+
+## Required Output Format:
+
+Generate the complete case document with the following 13 parts:
+
+## **Master Clinical Case: [Disease Name]**
+---
+
+### **Part 1: Case Description**
+**Patient Profile:**
+**Chief Complaint:**
+**History of Present Illness:**
+**Key Risk Factors:**
+**Relevant Review of Systems Snippet:**
+
+### **Part 2: Primary Symptoms**
+1. 
+2. 
+3. 
+4. 
+5. 
+
+### **Part 3: Background Factors**
+**Relevant Medical & Social History:**
+**Potentially Distracting/Non-Contributory Information:**
+
+### **Part 4: Physical Examination Checklist**
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+
+### **Part 5: Lab Test Masterlist**
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+
+### **Part 6: Information Gathering & Clue Unlocking**
+**Key History Questions to Ask:**
+**Expected Vital Signs:**
+**Key Expected Physical Exam Findings & Their Significance:**
+
+### **Part 7: Primary Diagnosis & Initial Reasoning**
+**Most Likely Primary Diagnosis:**
+**Reasoning Supporting This Diagnosis:**
+**Initial Differentiation from Key Alternatives:**
+**Suggested Concept Nodes for Diagnosis:**
+
+### **Part 8: Differential Diagnoses & Differentiation**
+**A) Plausible Differential Diagnoses (Should Be Considered):**
+**B) Less Likely/Incorrect Differentials (Tempting but Ruled Out):**
+**C) Rationale for Excluding Incorrect Differentials:**
+**D) Key Differentiating Features for Plausible Differentials (vs. Primary Diagnosis):**
+
+### **Part 9: Test Interpretation & Diagnostic Confirmation**
+**A) Expected Positive/Confirmatory Test Results (for Primary Diagnosis):**
+**B) Expected Results for Other Ordered/Considered Tests (Including Those Ruling Out Differentials):**
+**Suggested Concept Nodes for Test Interpretation:**
+
+### **Part 10: Final Diagnosis & Case Summary Feedback Points**
+**Final Confirmed Diagnosis:**
+**Key Evidence Summary Supporting Final Diagnosis:**
+**Resolution of Differential Diagnoses:**
+**Reflection on Case Challenges (if any):**
+
+### **Part 11: Management & Treatment Plan – *[Disease Name]***
+#### 🧪 Pre-Treatment & Baseline Investigations (Beyond Initial Diagnostics)
+#### 🔁 Monitoring During & After Treatment
+#### 💊 Structured Treatment Plan
+#### 🛡️ Supportive Care & Preventive Measures
+#### 📈 Prognosis & 📅 Long-Term Outlook
+
+### **Part 12: OSCE Stations – *[Disease Name]***
+#### 🔹 Station 1: Focused History Taking & Risk Assessment
+#### 🔹 Station 2: Physical Examination Technique or Image Interpretation
+#### 🔹 Station 3: Counseling & Management Explanation
+
+### **Part 13: MCQs – *[Disease Name]***
+#### ❓ MCQ 1: Focus on Classic Presentation / Key Diagnostic Feature
+#### ❓ MCQ 2: Focus on Most Appropriate Initial Investigation or Gold Standard Test
+#### ❓ MCQ 3: Focus on First-Line Treatment or Key Management Principle
+
+---
+
+**Instructions:**
+1. Extract the disease name from the case title for use in part titles
+2. Integrate the abstract variables, emotional layer, and mystery hook naturally throughout the case
+3. Use the clinical references to ensure medical accuracy
+4. Ensure the case addresses all provided competencies
+5. Follow the exact formatting structure shown above
+6. Include clinical reasoning throughout
+7. Make the case engaging and educational
+
+Generate the complete case document now:"""
+
+# Master Case Generator prompt (adapted from v4)
+MASTER_CASE_GENERATOR_PROMPT = """# 🧠 Master Case Generator v4.0 
+
+You are an expert AI Medical Education Content Creator. Your function is to generate highly structured, clinically accurate, and engaging medical case documents for teaching purposes based on provided clinical references and case specifications.
+
+**Core Objective:** Create a comprehensive case document with all 13 parts that serves as a rich grounding text for medical education. The case must be meticulously based on provided clinical references and current medical guidelines.
+
+**CRITICAL INSTRUCTION:** You MUST generate all 13 parts in the exact formatting structure provided below.
+
+---
+
+## Input Data:
+**Case Title:** {case_title}
+**Clinical Scenario:** {scenario}
+**Primary Competencies:** {competencies}
+**Educational Reasoning:** {reasoning}
+**Setting:** {setting}
+**Abstract Variables:** {abstract_variables}
+**Emotional Layer:** {emotional_layer}
+**Mystery Hook:** {mystery_hook}
+
+**Clinical References:**
+{references}
+
+---
+
+## Required Output Format:
+
+Generate the complete case document with the following 13 parts:
+
+## **Master Clinical Case: [Disease Name]**
+---
+
+### **Part 1: Case Description**
+**Patient Profile:**
+**Chief Complaint:**
+**History of Present Illness:**
+**Key Risk Factors:**
+**Relevant Review of Systems Snippet:**
+
+### **Part 2: Primary Symptoms**
+1. 
+2. 
+3. 
+4. 
+5. 
+
+### **Part 3: Background Factors**
+**Relevant Medical & Social History:**
+**Potentially Distracting/Non-Contributory Information:**
+
+### **Part 4: Physical Examination Checklist**
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+
+### **Part 5: Lab Test Masterlist**
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+
+### **Part 6: Information Gathering & Clue Unlocking**
+**Key History Questions to Ask:**
+**Expected Vital Signs:**
+**Key Expected Physical Exam Findings & Their Significance:**
+
+### **Part 7: Primary Diagnosis & Initial Reasoning**
+**Most Likely Primary Diagnosis:**
+**Reasoning Supporting This Diagnosis:**
+**Initial Differentiation from Key Alternatives:**
+**Suggested Concept Nodes for Diagnosis:**
+
+### **Part 8: Differential Diagnoses & Differentiation**
+**A) Plausible Differential Diagnoses (Should Be Considered):**
+**B) Less Likely/Incorrect Differentials (Tempting but Ruled Out):**
+**C) Rationale for Excluding Incorrect Differentials:**
+**D) Key Differentiating Features for Plausible Differentials (vs. Primary Diagnosis):**
+
+### **Part 9: Test Interpretation & Diagnostic Confirmation**
+**A) Expected Positive/Confirmatory Test Results (for Primary Diagnosis):**
+**B) Expected Results for Other Ordered/Considered Tests (Including Those Ruling Out Differentials):**
+**Suggested Concept Nodes for Test Interpretation:**
+
+### **Part 10: Final Diagnosis & Case Summary Feedback Points**
+**Final Confirmed Diagnosis:**
+**Key Evidence Summary Supporting Final Diagnosis:**
+**Resolution of Differential Diagnoses:**
+**Reflection on Case Challenges (if any):**
+
+### **Part 11: Management & Treatment Plan – *[Disease Name]***
+#### 🧪 Pre-Treatment & Baseline Investigations (Beyond Initial Diagnostics)
+#### 🔁 Monitoring During & After Treatment
+#### 💊 Structured Treatment Plan
+#### 🛡️ Supportive Care & Preventive Measures
+#### 📈 Prognosis & 📅 Long-Term Outlook
+
+### **Part 12: OSCE Stations – *[Disease Name]***
+#### 🔹 Station 1: Focused History Taking & Risk Assessment
+#### 🔹 Station 2: Physical Examination Technique or Image Interpretation
+#### 🔹 Station 3: Counseling & Management Explanation
+
+### **Part 13: MCQs – *[Disease Name]***
+#### ❓ MCQ 1: Focus on Classic Presentation / Key Diagnostic Feature
+#### ❓ MCQ 2: Focus on Most Appropriate Initial Investigation or Gold Standard Test
+#### ❓ MCQ 3: Focus on First-Line Treatment or Key Management Principle
+
+---
+
+**Instructions:**
+1. Extract the disease name from the case title for use in part titles
+2. Integrate the abstract variables, emotional layer, and mystery hook naturally throughout the case
+3. Use the clinical references to ensure medical accuracy
+4. Ensure the case addresses all provided competencies
+5. Follow the exact formatting structure shown above
+6. Include clinical reasoning throughout
+7. Make the case engaging and educational
+
+Generate the complete case document now:"""
 
 async def call_gemini_api(prompt: str) -> str:
     """Call Google Gemini API with the given prompt"""
@@ -505,4 +769,38 @@ async def generate_additional_cases(request: AdditionalCasesRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Error generating additional cases: {str(e)}"
+        )
+
+@router.post("/generate-master-case", response_model=MasterCaseResponse)
+async def generate_master_case_endpoint(request: MasterCaseRequest):
+    """
+    Generate a complete 13-part master case document from approved case details
+    """
+    return await generate_master_case(request)
+
+@router.post("/generate-master-cases-from-assessment")
+async def generate_master_cases_from_assessment_endpoint(request: dict):
+    """
+    Generate master case documents from approved assessment cases.
+    Expects: {topic_name: str, approved_cases: list, original_topic_data: dict}
+    """
+    from routers.tables import sanitize_topic_name
+    
+    topic_name = request.get('topic_name')
+    approved_cases = request.get('approved_cases', [])
+    original_topic_data = request.get('original_topic_data', {})
+    
+    # Sanitize topic name to match how references are stored
+    sanitized_topic_name = sanitize_topic_name(topic_name) if topic_name else None
+    
+    result = await case_manager.generate_master_cases_from_assessment(
+        sanitized_topic_name, approved_cases, original_topic_data
+    )
+    
+    if result["success"]:
+        return JSONResponse(content=result)
+    else:
+        return JSONResponse(
+            status_code=400 if "Missing required fields" in result["message"] else 500,
+            content=result
         )

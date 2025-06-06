@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import routers
-from routers import upload, tables, chapters, extractions, admin, debug, assessment
+from routers import upload, tables, chapters, extractions, admin, debug, assessment, master_cases
 
 # Import utilities and configurations
 from utils import (
@@ -168,6 +168,7 @@ app.include_router(extractions.router)
 app.include_router(admin.router)
 app.include_router(debug.router)
 app.include_router(assessment.router)
+app.include_router(master_cases.router)
 
 # Legacy endpoints for backward compatibility
 @app.post("/upload-document/")

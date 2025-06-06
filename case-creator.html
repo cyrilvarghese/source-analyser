@@ -442,7 +442,8 @@
             let tableHTML = '';
 
             data.topics.forEach((topic, topicIndex) => {
-                const topicId = `topic-${topicIndex}`;
+                // Use sanitized topic name as ID instead of index
+                const topicId = sanitizeTopicName(topic.topic);
 
                 // Topic header row
                 tableHTML += `
@@ -464,7 +465,7 @@
                                 </button>
                                 <button onclick="createAssessment('${topicId}', '${escapeHtml(topic.topic)}')" 
                                         class="bg-stone-600 hover:bg-stone-700 text-white px-3 py-1 rounded text-sm">
-                                    <i class="fas fa-plus-circle mr-1"></i>Create Assessment
+                                    <i class="fas fa-plus-circle mr-1"></i>Create Cases
                                 </button>
                             </div>
                         </div>
@@ -485,7 +486,7 @@
                 `;
 
                 // Load references count for this topic
-                loadTopicReferences(topicId);
+                loadTopicReferences(topicId, topic.topic);
 
                 // Table header for this topic
                 tableHTML += `
@@ -610,6 +611,14 @@
             return text.replace(/[&<>"']/g, function (m) { return map[m]; });
         }
 
+        function sanitizeTopicName(topicName) {
+            if (!topicName) return 'unknown_topic';
+            // Replace spaces and special characters with underscores
+            let sanitized = topicName.replace(/[^\w\s-]/g, '');
+            sanitized = sanitized.replace(/[-\s]+/g, '_');
+            return sanitized.trim('_').toLowerCase();
+        }
+
         function showTab(tabName) {
             // Update tab buttons
             document.getElementById('tableTab').className = tabName === 'table'
@@ -675,7 +684,7 @@
         }
 
         // Action functions
-        function createAssessment(topicId, topicName) {
+        async function createAssessment(topicId, topicName) {
             console.log('createAssessment called with:', { topicId, topicName });
             console.log('window.currentJsonData:', window.currentJsonData);
 
@@ -702,8 +711,57 @@
                 return;
             }
 
-            // Show the topic object in a popup
-            showTopicObjectPopup(topic);
+            // Store the selected topic globally
+            window.currentSelectedTopic = topic;
+
+            // Show loading modal
+            showAssessmentLoadingModal(topic.topic);
+
+            try {
+                console.log('Calling assessment API with topic:', topic);
+
+                const response = await fetch('/api/assessment/generate-cases', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        selected_topic: topic
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Assessment API response:', result);
+
+                // Store the result globally for the case editor
+                window.currentRawLLMResult = result;
+
+                // Store original topic data in the result for future reference
+                if (window.currentSelectedTopic) {
+                    result.originalTopicData = window.currentSelectedTopic;
+                } else {
+                    result.originalTopicData = topic;
+                }
+
+                // Cache the assessment result
+                await cacheAssessmentResult(result, topic);
+
+                // Close loading modal
+                closeAssessmentLoadingModal();
+
+                // Directly show the case editor (skip raw JSON modal)
+                showCaseEditor();
+
+            } catch (error) {
+                console.error('Error calling assessment API:', error);
+                closeAssessmentLoadingModal();
+                showAssessmentErrorModal(error.message);
+            }
         }
 
         function showTopicObjectPopup(topic) {
@@ -829,14 +887,24 @@
                 const result = await response.json();
                 console.log('Assessment API response:', result);
 
+                // Store the result globally for the case editor
+                window.currentRawLLMResult = result;
+
+                // Store original topic data in the result for future reference
+                if (window.currentSelectedTopic) {
+                    result.originalTopicData = window.currentSelectedTopic;
+                } else {
+                    result.originalTopicData = topic;
+                }
+
                 // Cache the assessment result
                 await cacheAssessmentResult(result, topic);
 
                 // Close loading modal
                 closeAssessmentLoadingModal();
 
-                // Show raw JSON response first
-                showRawLLMResponseModal(result, topic.topic);
+                // Directly show the case editor (skip raw JSON modal)
+                showCaseEditor();
 
             } catch (error) {
                 console.error('Error calling assessment API:', error);
@@ -1150,7 +1218,7 @@
                                 Preview Changes
                             </button>
                             <button onclick="saveUpdatedCases()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-md">
-                                Save Changes
+                                Save Changes & Approve Assessment
                             </button>
                         </div>
                     </div>
@@ -1203,9 +1271,21 @@
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Educational Reasoning</label>
-                        <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 case-reasoning" 
-                                  rows="2" placeholder="Why this case addresses the competencies...">${escapeHtml(caseItem.reasoning)}</textarea>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Educational Reasoning</label>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="flex items-start space-x-2">
+                                <div class="flex-shrink-0">
+                                    <svg class="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <h6 class="font-medium text-blue-900 mb-1">AI-Generated Educational Rationale</h6>
+                                    <p class="text-blue-800 text-sm leading-relaxed case-reasoning-display">${escapeHtml(caseItem.reasoning)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" class="case-reasoning" value="${escapeHtml(caseItem.reasoning)}">
                     </div>
                 </div>
             `;
@@ -1220,7 +1300,7 @@
                 scenario: '',
                 setting: '',
                 primaryCompetencies: [],
-                reasoning: ''
+                reasoning: 'Custom case added by medical educator - educational rationale to be determined based on competency alignment.'
             }, newIndex);
 
             casesContainer.insertAdjacentHTML('beforeend', newCaseHtml);
@@ -1293,41 +1373,55 @@
             const updatedCases = collectCasesFromEditor();
 
             // Update the current result with new cases
-            if (window.currentRawLLMResult) {
-                window.currentRawLLMResult.recommendedCases = updatedCases;
-                window.currentRawLLMResult.recommendation.totalCases = updatedCases.length;
-                window.currentRawLLMResult.recommendation.needsRevision = false;
-                window.currentRawLLMResult.recommendation.revisionNotes = "Cases manually reviewed and updated by medical educator";
+            if (!window.currentRawLLMResult) {
+                alert('Error: No assessment data available. Please restart the assessment process.');
+                return;
             }
+
+            window.currentRawLLMResult.recommendedCases = updatedCases;
+            window.currentRawLLMResult.recommendation.totalCases = updatedCases.length;
+            window.currentRawLLMResult.recommendation.needsRevision = false;
+            window.currentRawLLMResult.recommendation.revisionNotes = "Cases manually reviewed and updated by medical educator";
+
+            // Ensure we have the original topic data
+            if (!window.currentRawLLMResult.originalTopicData && window.currentSelectedTopic) {
+                window.currentRawLLMResult.originalTopicData = window.currentSelectedTopic;
+            }
+
+            // Store the assessment result globally for the approval function
+            window.currentAssessmentResult = window.currentRawLLMResult;
+
+            // Also set the topic ID in master case state for the integration
+            if (window.masterCaseState && window.currentSelectedTopic && window.currentSelectedTopic.topic) {
+                window.masterCaseState.currentTopicId = window.currentSelectedTopic.topic;
+            } else if (window.masterCaseState && window.currentRawLLMResult.topic) {
+                window.masterCaseState.currentTopicId = window.currentRawLLMResult.topic;
+            }
+
+            console.log('Assessment data prepared for approval:', window.currentAssessmentResult);
 
             closeCaseEditor();
             closeRawLLMModal();
 
-            // Show success message and option to view results
-            const successModal = document.createElement('div');
-            successModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            successModal.innerHTML = `
-                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 text-center">
-                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Cases Updated Successfully!</h3>
-                    <p class="text-gray-600 mb-4">Your customized assessment cases have been saved.</p>
-                    <div class="space-x-3">
-                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
-                                class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
-                            Close
-                        </button>
-                        <button onclick="this.parentElement.parentElement.parentElement.remove(); showAssessmentResultsModal(window.currentRawLLMResult);" 
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                            View Final Results
-                        </button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(successModal);
+            // Directly proceed to approval without showing success popup
+            if (typeof approveAssessment === 'function') {
+                try {
+                    approveAssessment();
+                } catch (error) {
+                    console.error('Error in approveAssessment:', error);
+                    alert('Error during approval process: ' + error.message);
+                }
+            } else {
+                // Fallback: trigger the custom event for approval
+                const approvalEvent = new CustomEvent('assessmentCasesApproved', {
+                    detail: {
+                        topic: window.currentRawLLMResult.originalTopicData || { topic: window.currentRawLLMResult.topic },
+                        cases: updatedCases,
+                        analysis: window.currentRawLLMResult
+                    }
+                });
+                document.dispatchEvent(approvalEvent);
+            }
         }
 
         function collectCasesFromEditor() {
@@ -1721,15 +1815,7 @@
             }
         }
 
-        function approveAssessment() {
-            const result = window.currentAssessmentResult;
-            if (result) {
-                closeAssessmentResultsModal();
-                alert(`Assessment approved! ${result.recommendedCases.length} cases ready for master case generation.\n\nNext: Integrate with your master case generation system.`);
-                // Here you would integrate with your master case generation system
-                console.log('Approved assessment result:', result);
-            }
-        }
+        // approveAssessment function moved to js/master-case-integration.js
 
         function showAddCaseForm() {
             console.log('showAddCaseForm called');
@@ -1996,9 +2082,14 @@
         }
 
         // Topic References Management
-        async function loadTopicReferences(topicId) {
+        async function loadTopicReferences(topicId, topicName) {
             try {
-                const response = await fetch(`/api/tables/topics/${topicId}/references/`);
+                if (!topicName) {
+                    console.error('Topic name is required for loadTopicReferences');
+                    return;
+                }
+
+                const response = await fetch(`/api/tables/topics/${encodeURIComponent(topicName)}/references/`);
                 const result = await response.json();
 
                 if (result.success) {
@@ -2022,7 +2113,7 @@
             const referencesSection = document.getElementById(`references-${topicId}`);
             if (referencesSection.classList.contains('hidden')) {
                 referencesSection.classList.remove('hidden');
-                loadTopicReferences(topicId); // Refresh when opening
+                loadTopicReferences(topicId, topicName); // Refresh when opening
             } else {
                 referencesSection.classList.add('hidden');
             }
@@ -2053,11 +2144,11 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="downloadReference('${topicId}', '${ref.id}')" 
+                        <button onclick="downloadReference('${ref.topic_name || 'Unknown'}', '${ref.id}')" 
                                 class="bg-blue-100 hover:bg-blue-200 text-blue-600 px-2 py-1 rounded text-xs">
                             <i class="fas fa-download"></i>
                         </button>
-                        <button onclick="deleteReference('${topicId}', '${ref.id}', '${escapeHtml(ref.filename)}')" 
+                        <button onclick="deleteReference('${ref.topic_name || 'Unknown'}', '${ref.id}', '${escapeHtml(ref.filename)}')" 
                                 class="bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded text-xs">
                             <i class="fas fa-trash"></i>
                         </button>
@@ -2128,7 +2219,7 @@
             // Handle form submission
             document.getElementById('addReferenceForm').addEventListener('submit', (e) => {
                 e.preventDefault();
-                uploadReference(topicId);
+                uploadReference(topicId, topicName);
             });
         }
 
@@ -2184,7 +2275,7 @@
             handleFileSelection(); // Refresh the preview
         }
 
-        async function uploadReference(topicId) {
+        async function uploadReference(topicId, topicName) {
             try {
                 const formData = new FormData();
                 const fileInput = document.getElementById('referenceFiles');
@@ -2226,7 +2317,7 @@
 
                     if (xhr.status === 200 && result.success) {
                         closeReferenceModal();
-                        loadTopicReferences(topicId); // Refresh the references list
+                        loadTopicReferences(topicId, topicName); // Refresh the references list
                         alert(`${result.count} reference document(s) uploaded successfully!`);
                     } else {
                         alert(`Error: ${result.message}`);
@@ -2243,7 +2334,7 @@
                     progressSection.classList.add('hidden');
                 });
 
-                xhr.open('POST', `/api/tables/topics/${topicId}/references/`);
+                xhr.open('POST', `/api/tables/topics/${encodeURIComponent(topicName)}/references/`);
                 xhr.send(formData);
 
             } catch (error) {
@@ -2259,9 +2350,9 @@
             }
         }
 
-        async function downloadReference(topicId, referenceId) {
+        async function downloadReference(topicName, referenceId) {
             try {
-                const response = await fetch(`/api/tables/topics/${topicId}/references/${referenceId}/download/`);
+                const response = await fetch(`/api/tables/topics/${encodeURIComponent(topicName)}/references/${referenceId}/download/`);
 
                 if (response.ok) {
                     const blob = await response.blob();
@@ -2282,20 +2373,20 @@
             }
         }
 
-        async function deleteReference(topicId, referenceId, filename) {
+        async function deleteReference(topicName, referenceId, filename) {
             if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
                 return;
             }
 
             try {
-                const response = await fetch(`/api/tables/topics/${topicId}/references/${referenceId}/`, {
+                const response = await fetch(`/api/tables/topics/${encodeURIComponent(topicName)}/references/${referenceId}/`, {
                     method: 'DELETE'
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
-                    loadTopicReferences(topicId); // Refresh the references list
+                    loadTopicReferences(sanitizeTopicName(topicName), topicName); // Refresh the references list
                 } else {
                     alert(`Error: ${result.message}`);
                 }
@@ -2328,10 +2419,11 @@
         // Cache assessment results
         async function cacheAssessmentResult(result, originalTopic) {
             try {
+                const topicName = result.topic || originalTopic.topic;
                 const cacheData = {
-                    id: `assessment_${Date.now()}`,
+                    id: topicName,  // Use topic name as cache key instead of timestamp
                     type: 'assessment',
-                    topic: result.topic || originalTopic.topic,
+                    topic: topicName,
                     originalTopic: originalTopic,
                     assessmentResult: result,
                     createdAt: new Date().toISOString(),
@@ -2404,8 +2496,8 @@
         });
     </script>
 
-    <!-- Include Case Generation Integration -->
-    <script src="case-generation-integration.js"></script>
+    <!-- Include Master Case Generation Integration -->
+    <script src="js/master-case-integration.js"></script>
 </body>
 
 </html>

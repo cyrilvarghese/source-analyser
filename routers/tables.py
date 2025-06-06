@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import json
+import re
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, FileResponse
@@ -23,6 +24,15 @@ ASSESSMENT_CACHE_MAP = ASSESSMENT_CACHE_DIR / "assessment_cache_map.json"
 # Topic references directory
 TOPIC_REFERENCES_DIR = Path("cache/topic-references")
 TOPIC_REFERENCES_MAP = TOPIC_REFERENCES_DIR / "references_map.json"
+
+def sanitize_topic_name(topic_name: str) -> str:
+    """Sanitize topic name for use as directory name"""
+    if not topic_name:
+        return topic_name
+    # Replace spaces and special characters with underscores
+    sanitized = re.sub(r'[^\w\s-]', '', topic_name)
+    sanitized = re.sub(r'[-\s]+', '_', sanitized)
+    return sanitized.strip('_')
 
 def ensure_topic_references_dir():
     """Ensure topic references directory exists"""
@@ -74,18 +84,31 @@ def save_assessment_cache(cache_data):
     """Save assessment result to cache"""
     ensure_assessment_cache_dir()
     
-    # Generate file path
-    cache_id = cache_data['id']
+    # Generate file path using sanitized topic name as cache key
+    topic_name = cache_data.get('topic', 'Unknown_Topic')
+    sanitized_topic = sanitize_topic_name(topic_name)
+    cache_id = sanitized_topic if sanitized_topic else f"topic_{int(time.time())}"
+    
     json_filename = f"{cache_id}.json"
     json_path = ASSESSMENT_CACHE_DIR / json_filename
     
     try:
+        # Check if cache already exists and remove old file
+        cache_map = load_assessment_cache_map()
+        if cache_id in cache_map:
+            old_json_file = cache_map[cache_id].get('json_file')
+            if old_json_file and os.path.exists(old_json_file):
+                try:
+                    os.remove(old_json_file)
+                    print(f"Replaced existing cache for topic: {topic_name}")
+                except OSError:
+                    pass  # File might be in use or already deleted
+        
         # Save JSON file
         with open(json_path, 'w') as f:
             json.dump(cache_data, f, indent=2)
         
         # Update cache map
-        cache_map = load_assessment_cache_map()
         cache_map[cache_id] = {
             'type': 'assessment',
             'json_file': str(json_path),
@@ -93,7 +116,8 @@ def save_assessment_cache(cache_data):
             'created_at': cache_data.get('createdAt', ''),
             'cases_count': cache_data.get('casesCount', 0),
             'competencies_count': cache_data.get('competenciesCount', 0),
-            'coverage_percentage': cache_data.get('coveragePercentage', 0)
+            'coverage_percentage': cache_data.get('coveragePercentage', 0),
+            'cache_id': cache_id  # Store the topic-based cache ID
         }
         save_assessment_cache_map(cache_map)
         
@@ -962,9 +986,9 @@ async def get_cached_file(file_id: str):
             }
         )
 
-@router.post("/topics/{topic_id}/references/")
+@router.post("/topics/{topic_name}/references/")
 async def attach_reference_to_topic(
-    topic_id: str,
+    topic_name: str,
     files: list[UploadFile] = File(...),
     description: str = Form("")
 ):
@@ -972,14 +996,18 @@ async def attach_reference_to_topic(
     try:
         ensure_topic_references_dir()
         
-        # Create topic-specific directory
-        topic_dir = TOPIC_REFERENCES_DIR / topic_id
+        # Use sanitized topic_name as cache key
+        if not topic_name:
+            raise HTTPException(status_code=400, detail="topic_name is required")
+            
+        cache_key = sanitize_topic_name(topic_name)
+        topic_dir = TOPIC_REFERENCES_DIR / cache_key
         topic_dir.mkdir(parents=True, exist_ok=True)
         
-        # Update references map
+        # Update references map (use cache_key as the key for consistency)
         references_map = load_topic_references_map()
-        if topic_id not in references_map:
-            references_map[topic_id] = []
+        if cache_key not in references_map:
+            references_map[cache_key] = []
         
         uploaded_references = []
         
@@ -996,17 +1024,19 @@ async def attach_reference_to_topic(
                 shutil.copyfileobj(file.file, buffer)
             
             reference_entry = {
-                "id": f"{topic_id}_{timestamp}_{len(uploaded_references)}",
+                "id": f"{topic_name}_{timestamp}_{len(uploaded_references)}",
                 "filename": file.filename,
                 "safe_filename": safe_filename,
                 "description": description,
                 "file_path": str(file_path),
                 "size": file_path.stat().st_size,
                 "uploaded_at": time.strftime('%Y-%m-%d %H:%M:%S'),
-                "mime_type": file.content_type
+                "mime_type": file.content_type,
+                "topic_name": topic_name,
+                "cache_key": cache_key
             }
             
-            references_map[topic_id].append(reference_entry)
+            references_map[cache_key].append(reference_entry)
             uploaded_references.append(reference_entry)
             
             # Small delay to ensure unique timestamps
@@ -1014,9 +1044,19 @@ async def attach_reference_to_topic(
         
         save_topic_references_map(references_map)
         
+        # Generate/update the markdown context file for this topic
+        try:
+            from services.reference_processor import reference_processor
+            await reference_processor.create_topic_reference_context(cache_key, topic_name)
+            print(f"✅ Updated reference context file for topic '{topic_name}' (cache: {cache_key})")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to create reference context file: {e}")
+        
         return JSONResponse(content={
             "success": True,
-            "message": f"{len(uploaded_references)} reference document(s) attached to topic {topic_id}",
+            "message": f"{len(uploaded_references)} reference document(s) attached to topic '{topic_name}'",
+            "topic_name": topic_name,
+            "cache_key": cache_key,
             "references": uploaded_references,
             "count": len(uploaded_references)
         })
@@ -1030,12 +1070,13 @@ async def attach_reference_to_topic(
             }
         )
 
-@router.get("/topics/{topic_id}/references/")
-async def list_topic_references(topic_id: str):
+@router.get("/topics/{topic_name}/references/")
+async def list_topic_references(topic_name: str):
     """List all reference documents for a specific topic."""
     try:
+        cache_key = sanitize_topic_name(topic_name)
         references_map = load_topic_references_map()
-        topic_references = references_map.get(topic_id, [])
+        topic_references = references_map.get(cache_key, [])
         
         # Filter out references where files no longer exist
         valid_references = []
@@ -1045,12 +1086,12 @@ async def list_topic_references(topic_id: str):
         
         # Update map if we removed any invalid references
         if len(valid_references) != len(topic_references):
-            references_map[topic_id] = valid_references
+            references_map[cache_key] = valid_references
             save_topic_references_map(references_map)
         
         return JSONResponse(content={
             "success": True,
-            "topic_id": topic_id,
+            "topic_name": topic_name,
             "references": valid_references
         })
         
@@ -1063,12 +1104,13 @@ async def list_topic_references(topic_id: str):
             }
         )
 
-@router.get("/topics/{topic_id}/references/{reference_id}/download/")
-async def download_topic_reference(topic_id: str, reference_id: str):
+@router.get("/topics/{topic_name}/references/{reference_id}/download/")
+async def download_topic_reference(topic_name: str, reference_id: str):
     """Download a specific reference document."""
     try:
+        cache_key = sanitize_topic_name(topic_name)
         references_map = load_topic_references_map()
-        topic_references = references_map.get(topic_id, [])
+        topic_references = references_map.get(cache_key, [])
         
         # Find the reference
         reference = None
@@ -1082,7 +1124,7 @@ async def download_topic_reference(topic_id: str, reference_id: str):
                 status_code=404,
                 content={
                     "success": False,
-                    "message": f"Reference {reference_id} not found for topic {topic_id}"
+                    "message": f"Reference {reference_id} not found for topic {topic_name}"
                 }
             )
         
@@ -1111,12 +1153,13 @@ async def download_topic_reference(topic_id: str, reference_id: str):
             }
         )
 
-@router.delete("/topics/{topic_id}/references/{reference_id}/")
-async def delete_topic_reference(topic_id: str, reference_id: str):
+@router.delete("/topics/{topic_name}/references/{reference_id}/")
+async def delete_topic_reference(topic_name: str, reference_id: str):
     """Delete a reference document from a topic."""
     try:
+        cache_key = sanitize_topic_name(topic_name)
         references_map = load_topic_references_map()
-        topic_references = references_map.get(topic_id, [])
+        topic_references = references_map.get(cache_key, [])
         
         # Find and remove the reference
         reference_to_delete = None
@@ -1133,7 +1176,7 @@ async def delete_topic_reference(topic_id: str, reference_id: str):
                 status_code=404,
                 content={
                     "success": False,
-                    "message": f"Reference {reference_id} not found for topic {topic_id}"
+                    "message": f"Reference {reference_id} not found for topic {topic_name}"
                 }
             )
         
@@ -1143,12 +1186,12 @@ async def delete_topic_reference(topic_id: str, reference_id: str):
             os.remove(file_path)
         
         # Update references map
-        references_map[topic_id] = updated_references
+        references_map[cache_key] = updated_references
         save_topic_references_map(references_map)
         
         return JSONResponse(content={
             "success": True,
-            "message": f"Reference {reference_id} deleted from topic {topic_id}"
+            "message": f"Reference {reference_id} deleted from topic {topic_name}"
         })
         
     except Exception as e:
@@ -1255,7 +1298,7 @@ async def get_cached_assessment(cache_id: str):
         return JSONResponse(content=cached_data)
         
     except Exception as e:
-        return JSONResponse(
+                return JSONResponse(
             status_code=500,
             content={
                 "success": False,
