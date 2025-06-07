@@ -22,8 +22,17 @@ document.addEventListener('DOMContentLoaded', function () {
  */
 function setupEventListeners() {
     const searchInput = document.getElementById('searchInput');
-
     searchInput.addEventListener('input', handleSearch);
+
+    // Event delegation for case checkboxes
+    document.addEventListener('change', function (event) {
+        if (event.target.classList.contains('case-checkbox')) {
+            const topicId = event.target.getAttribute('data-topic-id');
+            const caseId = event.target.getAttribute('data-case-id');
+            console.log('🔘 Case checkbox changed via delegation:', caseId, 'topic:', topicId);
+            updateSelectAllState(topicId);
+        }
+    });
 }
 
 /**
@@ -132,7 +141,7 @@ function renderCaseLibrary(topicsData = null) {
                             <button id="uploadMasterCases-${topicId}" 
                                     onclick="uploadMasterCases('${topicId}')" 
                                     class="bg-stone-600 hover:bg-stone-700 text-white px-3 py-1 rounded text-sm hidden">
-                                <i class="fas fa-upload mr-1"></i>Upload Master Cases
+                                <i class="fas fa-upload mr-1"></i><span id="uploadButtonText-${topicId}">Upload Master Cases</span>
                             </button>
                         </div>
                     </div>
@@ -182,8 +191,7 @@ function renderCaseTableRow(caseItem) {
                     <input type="checkbox" 
                            class="case-checkbox w-4 h-4 text-stone-600 bg-gray-100 border-gray-300 rounded focus:ring-stone-500 focus:ring-2"
                            data-case-id="${caseItem.id}" 
-                           data-topic-id="${sanitizeTopicName(caseItem.topic)}"
-                           onchange="updateSelectAllState('${sanitizeTopicName(caseItem.topic)}')">
+                           data-topic-id="${sanitizeTopicName(caseItem.topic)}">
                 </div>
                 
                 <!-- Case Title -->
@@ -287,6 +295,7 @@ function toggleSelectAllTopic(topicId) {
     const selectAllCheckbox = document.getElementById(`selectAll-${topicId}`);
     const caseCheckboxes = document.querySelectorAll(`input[data-topic-id="${topicId}"]`);
     const uploadButton = document.getElementById(`uploadMasterCases-${topicId}`);
+    const uploadButtonText = document.getElementById(`uploadButtonText-${topicId}`);
 
     caseCheckboxes.forEach(checkbox => {
         checkbox.checked = selectAllCheckbox.checked;
@@ -295,32 +304,61 @@ function toggleSelectAllTopic(topicId) {
     // Show/hide upload button based on select all state
     if (selectAllCheckbox.checked) {
         uploadButton.classList.remove('hidden');
+        if (uploadButtonText) {
+            uploadButtonText.textContent = `Upload All ${caseCheckboxes.length} Cases`;
+        }
     } else {
         uploadButton.classList.add('hidden');
     }
 }
 
 /**
+ * Handle individual case checkbox changes
+ */
+function handleCaseCheckboxChange(sanitizedTopicId, originalTopicName) {
+    console.log('🔘 Checkbox changed for topic:', originalTopicName, 'sanitized:', sanitizedTopicId);
+    updateSelectAllState(sanitizedTopicId);
+}
+
+/**
  * Update the select all checkbox state based on individual selections
  */
 function updateSelectAllState(topicId) {
+    console.log(`🔍 updateSelectAllState called with topicId: "${topicId}"`);
+
     const selectAllCheckbox = document.getElementById(`selectAll-${topicId}`);
     const caseCheckboxes = document.querySelectorAll(`input[data-topic-id="${topicId}"]`);
     const checkedBoxes = document.querySelectorAll(`input[data-topic-id="${topicId}"]:checked`);
     const uploadButton = document.getElementById(`uploadMasterCases-${topicId}`);
+    const uploadButtonText = document.getElementById(`uploadButtonText-${topicId}`);
+
+    console.log(`   selectAllCheckbox:`, selectAllCheckbox);
+    console.log(`   caseCheckboxes found:`, caseCheckboxes.length);
+    console.log(`   checkedBoxes found:`, checkedBoxes.length);
+    console.log(`   uploadButton:`, uploadButton);
+    console.log(`   uploadButtonText:`, uploadButtonText);
 
     if (checkedBoxes.length === 0) {
+        console.log(`   📝 No boxes checked - hiding button`);
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = false;
-        uploadButton.classList.add('hidden');
+        if (uploadButton) uploadButton.classList.add('hidden');
     } else if (checkedBoxes.length === caseCheckboxes.length) {
+        console.log(`   📝 All boxes checked - showing button`);
         selectAllCheckbox.checked = true;
         selectAllCheckbox.indeterminate = false;
-        uploadButton.classList.remove('hidden');
+        if (uploadButton) uploadButton.classList.remove('hidden');
+        if (uploadButtonText) {
+            uploadButtonText.textContent = `Upload All ${checkedBoxes.length} Cases`;
+        }
     } else {
+        console.log(`   📝 Some boxes checked (${checkedBoxes.length}/${caseCheckboxes.length}) - showing button`);
         selectAllCheckbox.checked = false;
         selectAllCheckbox.indeterminate = true;
-        uploadButton.classList.add('hidden');
+        if (uploadButton) uploadButton.classList.remove('hidden'); // Show button when some (but not all) are selected
+        if (uploadButtonText) {
+            uploadButtonText.textContent = `Upload ${checkedBoxes.length} Selected Cases`;
+        }
     }
 }
 

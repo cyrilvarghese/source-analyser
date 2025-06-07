@@ -424,11 +424,30 @@ async def upload_master_cases_with_ids(request_data: dict):
                         if response.status == 200:
                             response_data = await response.json()
                             print(f"   ✅ Successfully uploaded: {file_title}")
-                            uploaded_files.append({
-                                "case_id": case_id,
-                                "filename": file_title,
-                                "external_response": response_data
-                            })
+                            
+                            # Move file to "ready" folder after successful upload
+                            try:
+                                ready_dir = case_docs_dir / "ready"
+                                ready_dir.mkdir(exist_ok=True)
+                                
+                                new_file_path = ready_dir / case_file_path.name
+                                case_file_path.rename(new_file_path)
+                                print(f"   📁 Moved to ready folder: {new_file_path}")
+                                
+                                uploaded_files.append({
+                                    "case_id": case_id,
+                                    "filename": file_title,
+                                    "moved_to": str(new_file_path),
+                                    "external_response": response_data
+                                })
+                            except Exception as move_error:
+                                print(f"   ⚠️ Upload successful but failed to move file: {move_error}")
+                                uploaded_files.append({
+                                    "case_id": case_id,
+                                    "filename": file_title,
+                                    "move_error": str(move_error),
+                                    "external_response": response_data
+                                })
                         else:
                             error_text = await response.text()
                             print(f"   ❌ Upload failed (HTTP {response.status}): {error_text}")

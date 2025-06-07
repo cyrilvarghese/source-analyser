@@ -396,7 +396,7 @@ async function downloadAllCases() {
  * Open master case library page to view all generated cases
  */
 function openCacheDirectory() {
-    window.location.href = 'caselist.html';
+    window.location.href = 'master-doc-list.html';
 }
 
 /**
